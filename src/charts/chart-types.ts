@@ -10,5 +10,7 @@ export {
   StatisticsData,
   FinalStatistics,
   StreetProfitStats,
-  StreetProfitBarData
+  StreetProfitBarData,
+  PositionStreetProfitStats,
+  CompositePositionChartData
 } from '../types'; 

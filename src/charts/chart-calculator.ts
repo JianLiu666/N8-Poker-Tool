@@ -1,4 +1,4 @@
-import { PokerHand, HandResult } from '../types';
+import { PokerHand, PokerPosition } from '../types';
 import { 
   ChartDataPoint, 
   ProfitChartData, 
@@ -6,7 +6,9 @@ import {
   FinalStatistics,
   StatisticsData,
   StreetProfitStats,
-  StreetProfitBarData
+  StreetProfitBarData,
+  PositionStreetProfitStats,
+  CompositePositionChartData
 } from './chart-types';
 import { CHARTS } from '../constants';
 import { roundToDecimals, isShowdownResult } from '../utils';
@@ -70,6 +72,41 @@ export class ChartCalculator {
     }
     
     return { dataPoints };
+  }
+
+  /**
+   * Calculate composite position-based chart data for all positions plus overall stats
+   * @param hands - Array of poker hands to process
+   */
+  calculateCompositePositionChartData(hands: PokerHand[]): CompositePositionChartData {
+    // Calculate overall statistics (same as existing street profit data)
+    const overall = this.calculateStreetProfitData(hands);
+    
+    // Define the positions in the order we want them displayed
+    const positions = [
+      PokerPosition.UTG,
+      PokerPosition.HJ,
+      PokerPosition.CO,
+      PokerPosition.BTN,
+      PokerPosition.SB,
+      PokerPosition.BB
+    ];
+    
+    // Calculate statistics for each position
+    const byPosition: PositionStreetProfitStats[] = positions.map(position => {
+      const positionHands = hands.filter(hand => hand.hero_position === position);
+      const positionData = this.calculateStreetProfitData(positionHands);
+      
+      return {
+        position,
+        dataPoints: positionData.dataPoints
+      };
+    });
+    
+    return {
+      overall,
+      byPosition
+    };
   }
 
   /**

@@ -39,11 +39,12 @@ export class ChartCommand {
       // Calculate data and generate charts
       const { profitData, bb100Data } = this.calculateChartData(hands);
       const streetProfitData = this.chartCalculator.calculateStreetProfitData(hands);
-      const { profitResult, bb100Result, streetProfitResult } = await this.generateCharts(profitData, bb100Data, streetProfitData);
+      const compositePositionData = this.chartCalculator.calculateCompositePositionChartData(hands);
+      const { profitResult, bb100Result, streetProfitResult, compositePositionResult } = await this.generateCharts(profitData, bb100Data, streetProfitData, compositePositionData);
       const statistics = this.chartCalculator.getFinalStatistics(profitData, bb100Data);
 
       // Output results
-      this.logResults(profitResult, bb100Result, streetProfitResult, statistics);
+      this.logResults(profitResult, bb100Result, streetProfitResult, compositePositionResult, statistics);
       console.log(`${LOG_EMOJIS.SUCCESS} Chart command completed successfully!`);
       
     } catch (error) {
@@ -92,7 +93,7 @@ export class ChartCommand {
   /**
    * Generate profit, BB/100 and street profit charts
    */
-  private async generateCharts(profitData: any, bb100Data: any, streetProfitData: any) {
+  private async generateCharts(profitData: any, bb100Data: any, streetProfitData: any, compositePositionData: any) {
     const interval = this.options.interval || CHARTS.DEFAULT_SAMPLING_INTERVAL;
     
     console.log(`${LOG_EMOJIS.CHART} Generating profit trend chart (interval: ${interval} hands)...`);
@@ -104,17 +105,21 @@ export class ChartCommand {
     console.log(`${LOG_EMOJIS.CHART} Generating Street Profit bar chart...`);
     const streetProfitResult = await this.chartGenerator.generateStreetProfitChart(streetProfitData);
 
-    return { profitResult, bb100Result, streetProfitResult };
+          console.log(`${LOG_EMOJIS.CHART} Generating Composite Position chart...`);
+      const compositePositionResult = await this.chartGenerator.generateCompositePositionChart(compositePositionData);
+
+    return { profitResult, bb100Result, streetProfitResult, compositePositionResult };
   }
 
   /**
    * Log the results of chart generation
    */
-  private logResults(profitResult: any, bb100Result: any, streetProfitResult: any, statistics: FinalStatistics): void {
+  private logResults(profitResult: any, bb100Result: any, streetProfitResult: any, compositePositionResult: any, statistics: FinalStatistics): void {
     console.log(`${LOG_EMOJIS.CHART} Charts generated successfully:`);
     console.log(`   - Profit chart: ${profitResult.filePath}`);
     console.log(`   - BB/100 chart: ${bb100Result.filePath}`);
     console.log(`   - Street Profit chart: ${streetProfitResult.filePath}`);
+    console.log(`   - Composite Position chart: ${compositePositionResult.filePath}`);
     
     this.logStatistics(statistics);
   }

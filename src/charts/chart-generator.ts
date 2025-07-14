@@ -10,7 +10,8 @@ import {
   ChartConfig,
   YAxisRange,
   StreetProfitBarData,
-  StreetProfitStats
+  StreetProfitStats,
+  CompositePositionChartData,
 } from './chart-types';
 import { CHARTS, CHART_COLORS } from '../constants';
 import { formatTimestamp, ensureDirectoryExists } from '../utils';
@@ -64,9 +65,26 @@ export class ChartGenerator {
   }
 
   /**
+   * Generate composite position profit chart with 7 subplots
+   */
+  async generateCompositePositionChart(data: CompositePositionChartData): Promise<ChartGenerationResult> {
+    const config = this.createChartConfig('composite-position');
+    const finalValues = this.extractCompositePositionFinalValues(data);
+    
+    // Create a truly composite chart by rendering multiple charts vertically
+    const filePath = await this.renderCompositeChart(data, config);
+    
+    return {
+      filePath,
+      totalHands: this.calculateTotalHandsFromComposite(data),
+      finalValues
+    };
+  }
+
+  /**
    * Create standardized chart configuration based on chart type
    */
-  private createChartConfig(type: 'profit' | 'bb100' | 'street-profit'): ChartConfig {
+  private createChartConfig(type: 'profit' | 'bb100' | 'street-profit' | 'composite-position'): ChartConfig {
     const timestamp = formatTimestamp();
     const configs = {
       'profit': {
@@ -86,13 +104,19 @@ export class ChartGenerator {
         xAxisLabel: 'Street Categories',
         yAxisLabel: 'Cumulative Profit',
         fileName: `poker-street-profit-chart-${timestamp}`
+      },
+      'composite-position': {
+        title: 'Poker Composite Position Profit Analysis',
+        xAxisLabel: 'Position',
+        yAxisLabel: 'Cumulative Profit',
+        fileName: `poker-composite-position-chart-${timestamp}`
       }
     };
 
     const baseConfig = configs[type];
     return {
       width: CHARTS.DEFAULT_WIDTH,
-      height: CHARTS.DEFAULT_HEIGHT,
+      height: type === 'composite-position' ? CHARTS.DEFAULT_HEIGHT * 2 : CHARTS.DEFAULT_HEIGHT, // Double height for composite chart
       ...baseConfig,
       fileName: `${baseConfig.fileName}${CHARTS.DEFAULT_FILE_EXTENSION}`
     };
@@ -389,6 +413,389 @@ export class ChartGenerator {
       'No Showdown BB/100': this.getLastValue(data.noShowdownOnlyBB100)
     };
   }
+
+  /**
+   * Calculate final values for composite position chart
+   */
+  private extractCompositePositionFinalValues(data: CompositePositionChartData): Record<string, number> {
+    const finalValues: Record<string, number> = {};
+    
+    // Add overall statistics
+    finalValues['Overall'] = data.overall.dataPoints.reduce((sum, point) => sum + point.totalProfit, 0);
+    
+    // Add position-specific statistics
+    data.byPosition.forEach(pos => {
+      const totalProfit = pos.dataPoints.reduce((sum, point) => sum + point.totalProfit, 0);
+      const totalHands = pos.dataPoints.reduce((sum, point) => sum + point.handCount, 0);
+      finalValues[`${pos.position} (${totalHands} hands)`] = totalProfit;
+    });
+    
+    return finalValues;
+  }
+
+  /**
+   * Calculate total hands from composite data
+   */
+  private calculateTotalHandsFromComposite(data: CompositePositionChartData): number {
+    return data.overall.dataPoints.reduce((sum, point) => sum + point.handCount, 0);
+  }
+
+  /**
+   * Render composite chart with all positions in a single image
+   */
+  private async renderCompositeChart(
+    data: CompositePositionChartData, 
+    config: ChartConfig
+  ): Promise<string> {
+    await ensureDirectoryExists(this.outputDir);
+
+    // Create a large canvas that will hold all 7 charts
+    const totalHeight = config.height;
+    const separatorMargin = 8; // Margin between charts and separators
+    const chartHeight = Math.floor((totalHeight - (6 * separatorMargin)) / 7); // 6 separators between 7 charts
+    const canvas = createCanvas(config.width, totalHeight);
+    const ctx = canvas.getContext('2d');
+
+    // Draw white background
+    ctx.fillStyle = CHARTS.BACKGROUND_COLOR;
+    ctx.fillRect(0, 0, config.width, totalHeight);
+
+    // Calculate color gradients for all categories based on overall statistics
+    const gradientColors = this.calculateGradientColors(data);
+
+    let currentY = 0;
+
+    // Chart titles and data
+    const chartsToRender = [
+      { title: 'Overall Statistics', data: data.overall, isOverall: true },
+      ...data.byPosition.map(pos => ({ 
+        title: `${pos.position} Position`, 
+        data: { dataPoints: pos.dataPoints },
+        position: pos.position,
+        isOverall: false
+      }))
+    ];
+
+    // Render each chart
+    for (let i = 0; i < chartsToRender.length; i++) {
+      const chartInfo = chartsToRender[i];
+      
+      await this.renderSingleChartSection(
+        ctx, 
+        chartInfo.data, 
+        chartInfo.title, 
+        0, 
+        currentY, 
+        config.width, 
+        chartHeight,
+        chartInfo.isOverall ? null : gradientColors[(chartInfo as any).position || '']
+      );
+      
+      currentY += chartHeight;
+      
+      // Add separator line between charts (except after the last chart)
+      if (i < chartsToRender.length - 1) {
+        currentY += separatorMargin / 2; // Add margin before separator
+        
+        ctx.strokeStyle = 'rgba(50, 50, 50, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, currentY);
+        ctx.lineTo(config.width, currentY);
+        ctx.stroke();
+        
+        currentY += separatorMargin / 2; // Add margin after separator
+      }
+    }
+
+    // Save the composite chart
+    const filePath = path.join(this.outputDir, config.fileName);
+    await this.saveChart(canvas, filePath);
+
+    return filePath;
+  }
+
+  /**
+   * Calculate gradient colors for each position based on overall statistics
+   */
+  private calculateGradientColors(data: CompositePositionChartData): Record<string, Record<string, { fillColor: string, borderColor: string }>> {
+    const gradientColors: Record<string, Record<string, { fillColor: string, borderColor: string }>> = {};
+    
+    // Get overall statistics as baseline
+    const overallValues: Record<string, number> = {};
+    data.overall.dataPoints?.forEach(point => {
+      overallValues[point.category] = point.totalProfit;
+    });
+    
+    // Collect all position values for each category to find min/max
+    const categoryValues: Record<string, number[]> = {};
+    data.byPosition.forEach(pos => {
+      pos.dataPoints.forEach(point => {
+        if (!categoryValues[point.category]) {
+          categoryValues[point.category] = [];
+        }
+        categoryValues[point.category].push(point.totalProfit);
+      });
+    });
+    
+    // Calculate colors for each position
+    data.byPosition.forEach(pos => {
+      gradientColors[pos.position] = {};
+      
+      pos.dataPoints.forEach(point => {
+        const category = point.category;
+        const value = point.totalProfit;
+        const overallValue = overallValues[category] || 0;
+        const categoryRange = categoryValues[category] || [value];
+        const minValue = Math.min(...categoryRange);
+        const maxValue = Math.max(...categoryRange);
+        
+        let fillColor: string;
+        let borderColor: string;
+        
+        if (overallValue >= 0) {
+          // For positive categories (wins), calculate gradient within wins
+          if (value >= 0) {
+            // Positive value: non-linear gradient emphasizing extremes
+            const ratio = maxValue > 0 ? value / maxValue : 0;
+            // Use exponential curve to make middle values lighter and extremes more prominent
+            const curvedRatio = Math.pow(ratio, 2.5);
+                         const fillIntensity = 0.15 + (curvedRatio * 0.65); // 0.15 to 0.8
+             fillColor = `rgba(34, 197, 94, ${fillIntensity})`;
+             borderColor = fillColor; // Same as fill color
+          } else {
+            // Negative value in positive category: use light red
+                         fillColor = 'rgba(239, 68, 68, 0.15)';
+             borderColor = fillColor; // Same as fill color
+          }
+        } else {
+          // For negative categories (losses), calculate gradient within losses
+          if (value <= 0) {
+            // Negative value: non-linear gradient emphasizing extremes
+            const ratio = minValue < 0 ? Math.abs(value) / Math.abs(minValue) : 0;
+            // Use exponential curve to make middle values lighter and extremes more prominent
+            const curvedRatio = Math.pow(ratio, 2.5);
+                         const fillIntensity = 0.15 + (curvedRatio * 0.65); // 0.15 to 0.8
+             fillColor = `rgba(239, 68, 68, ${fillIntensity})`;
+             borderColor = fillColor; // Same as fill color
+          } else {
+            // Positive value in negative category: use light green
+                         fillColor = 'rgba(34, 197, 94, 0.15)';
+             borderColor = fillColor; // Same as fill color
+          }
+        }
+        
+        gradientColors[pos.position][category] = { fillColor, borderColor };
+      });
+    });
+    
+    return gradientColors;
+  }
+
+  /**
+   * Render a single chart section within the composite chart with complete chart elements
+   */
+  private async renderSingleChartSection(
+    ctx: any,
+    data: StreetProfitBarData,
+    title: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    gradientColors?: Record<string, { fillColor: string, borderColor: string }> | null
+  ): Promise<void> {
+    // Save the current context state
+    ctx.save();
+    
+    // Set clipping region for this chart section
+    ctx.beginPath();
+    ctx.rect(x, y, width, height);
+    ctx.clip();
+    
+    // Translate to the chart section position
+    ctx.translate(x, y);
+    
+    // Draw section background
+    ctx.fillStyle = CHARTS.BACKGROUND_COLOR;
+    ctx.fillRect(0, 0, width, height);
+    
+    // Define chart margins and areas
+    const titleHeight = 30;
+    const marginTop = 40;
+    const marginBottom = 60; // Reduced bottom margin since no X-axis title
+    const marginLeft = 60;
+    const marginRight = 30;
+    
+    const chartAreaX = marginLeft;
+    const chartAreaY = marginTop;
+    const chartAreaWidth = width - marginLeft - marginRight;
+    const chartAreaHeight = height - marginTop - marginBottom;
+    
+    // Draw title
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(title, width / 2, 20);
+    
+    if (data.dataPoints && data.dataPoints.length > 0) {
+      // Find min and max values for scaling
+      const values = data.dataPoints.map(point => point.totalProfit);
+      const minValue = Math.min(0, ...values);
+      const maxValue = Math.max(0, ...values);
+      const valueRange = maxValue - minValue || 1;
+      
+      // Draw Y-axis grid lines and labels
+      this.drawYAxisGrid(ctx, chartAreaX, chartAreaY, chartAreaWidth, chartAreaHeight, minValue, maxValue);
+      
+      // Draw X-axis grid lines
+      this.drawXAxisGrid(ctx, chartAreaX, chartAreaY, chartAreaWidth, chartAreaHeight, data.dataPoints.length);
+      
+      // Draw zero baseline (horizontal line at y=0)
+      const zeroY = chartAreaY + chartAreaHeight * (1 - (-minValue / valueRange));
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(chartAreaX, zeroY);
+      ctx.lineTo(chartAreaX + chartAreaWidth, zeroY);
+      ctx.stroke();
+      
+      // Calculate bar dimensions
+      const barWidth = chartAreaWidth / data.dataPoints.length * 0.8;
+      const barSpacing = chartAreaWidth / data.dataPoints.length * 0.2;
+      
+      // Draw bars and labels
+      data.dataPoints.forEach((point, index) => {
+        const barX = chartAreaX + index * (barWidth + barSpacing) + barSpacing / 2;
+        const barHeight = Math.abs(point.totalProfit) / valueRange * chartAreaHeight * 0.8;
+        
+        let barY: number;
+        
+        if (point.totalProfit >= 0) {
+          barY = zeroY - barHeight;
+        } else {
+          barY = zeroY;
+        }
+        
+        // Determine bar colors
+        let fillColor: string;
+        let borderColor: string;
+        
+        if (gradientColors && gradientColors[point.category]) {
+          // Use gradient colors for position charts
+          fillColor = gradientColors[point.category].fillColor;
+          borderColor = gradientColors[point.category].borderColor;
+        } else {
+          // Use default colors for overall statistics
+          fillColor = point.totalProfit >= 0 ? CHART_COLORS.BAR_WINS : CHART_COLORS.BAR_LOSSES;
+          borderColor = point.totalProfit >= 0 ? CHART_COLORS.BAR_WINS_BORDER : CHART_COLORS.BAR_LOSSES_BORDER;
+        }
+        
+        // Draw bar
+        ctx.fillStyle = fillColor;
+        ctx.fillRect(barX, barY, barWidth, barHeight);
+        
+        // Draw data label
+        ctx.fillStyle = '#000000';
+        ctx.font = '9px Arial';
+        ctx.textAlign = 'center';
+        const formattedValue = Math.abs(point.totalProfit) < 0.01 ? 
+          point.totalProfit.toFixed(3) : 
+          point.totalProfit.toFixed(2);
+        const label = point.totalProfit >= 0 ? `+${formattedValue}` : formattedValue;
+        
+        // Position label above or below bar depending on sign
+        const labelY = point.totalProfit >= 0 ? barY - 5 : barY + barHeight + 12;
+        ctx.fillText(label, barX + barWidth / 2, labelY);
+        
+        // Draw category label (rotated)
+        ctx.save();
+        ctx.translate(barX + barWidth / 2, chartAreaY + chartAreaHeight + 20);
+        ctx.rotate(-Math.PI / 4);
+        ctx.font = '8px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(point.category, 0, 0);
+        ctx.restore();
+      });
+      
+      // Draw Y-axis label
+      ctx.save();
+      ctx.translate(15, chartAreaY + chartAreaHeight / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.font = 'bold 11px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('Cumulative Profit', 0, 0);
+      ctx.restore();
+      
+      // X-axis title removed as requested
+    }
+    
+    // Restore context state
+    ctx.restore();
+  }
+
+  /**
+   * Draw Y-axis grid lines and labels
+   */
+  private drawYAxisGrid(
+    ctx: any, 
+    chartX: number, 
+    chartY: number, 
+    chartWidth: number, 
+    chartHeight: number, 
+    minValue: number, 
+    maxValue: number
+  ): void {
+    const gridLines = 5;
+    const valueRange = maxValue - minValue;
+    
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+    ctx.lineWidth = 1;
+    ctx.font = '8px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#000000';
+    
+    for (let i = 0; i <= gridLines; i++) {
+      const y = chartY + (i / gridLines) * chartHeight;
+      const value = maxValue - (i / gridLines) * valueRange;
+      
+      // Draw grid line
+      ctx.beginPath();
+      ctx.moveTo(chartX, y);
+      ctx.lineTo(chartX + chartWidth, y);
+      ctx.stroke();
+      
+      // Draw label
+      ctx.fillText(value.toFixed(1), chartX - 5, y + 3);
+    }
+  }
+
+  /**
+   * Draw X-axis grid lines
+   */
+  private drawXAxisGrid(
+    ctx: any,
+    chartX: number,
+    chartY: number,
+    chartWidth: number,
+    chartHeight: number,
+    dataPointCount: number
+  ): void {
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+    ctx.lineWidth = 1;
+    
+    for (let i = 0; i <= dataPointCount; i++) {
+      const x = chartX + (i / dataPointCount) * chartWidth;
+      
+      // Draw grid line
+      ctx.beginPath();
+      ctx.moveTo(x, chartY);
+      ctx.lineTo(x, chartY + chartHeight);
+      ctx.stroke();
+    }
+  }
+
+
 
   /**
    * Create chart options with standardized styling

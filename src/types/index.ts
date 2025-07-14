@@ -167,6 +167,17 @@ export interface StreetProfitBarData {
   dataPoints: StreetProfitStats[];
 }
 
+// Position-based profit statistics for composite bar chart visualization
+export interface PositionStreetProfitStats {
+  position: string;
+  dataPoints: StreetProfitStats[];
+}
+
+export interface CompositePositionChartData {
+  overall: StreetProfitBarData;
+  byPosition: PositionStreetProfitStats[];
+}
+
 // ================== Parsing Result Interfaces ==================
 
 export interface ParseHandResult {

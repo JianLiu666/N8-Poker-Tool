@@ -11,56 +11,56 @@ import {
 import { CHARTS } from '../constants';
 import { roundToDecimals, isShowdownResult } from '../utils';
 
+/**
+ * Chart calculator responsible for processing poker hand data and generating chart datasets
+ * Optimized for performance with large datasets using interval-based smoothing
+ */
 export class ChartCalculator {
   
+  // Constants for better maintainability
+  private static readonly STREET_CATEGORIES = [
+    { street: 'preflop', result: 'win', label: 'Preflop Win' },
+    { street: 'preflop', result: 'loss', label: 'Preflop Loss' },
+    { street: 'flop', result: 'win', label: 'Flop Win' },
+    { street: 'flop', result: 'loss', label: 'Flop Loss' },
+    { street: 'turn', result: 'win', label: 'Turn Win' },
+    { street: 'turn', result: 'loss', label: 'Turn Loss' },
+    { street: 'river', result: 'win', label: 'River Win' },
+    { street: 'river', result: 'loss', label: 'River Loss' },
+    { street: 'showdown', result: 'win', label: 'Showdown Win' },
+    { street: 'showdown', result: 'loss', label: 'Showdown Loss' }
+  ] as const;
+
   /**
-   * Calculate cumulative profit data with smoothing
+   * Calculate cumulative profit data with optional smoothing for better performance
+   * @param hands - Array of poker hands to process
+   * @param smoothInterval - Interval for data point sampling (default from constants)
    */
   calculateProfitData(hands: PokerHand[], smoothInterval: number = CHARTS.DEFAULT_SAMPLING_INTERVAL): ProfitChartData {
-    return this.calculateSmoothProfitData(hands, smoothInterval);
+    return this.processProfitDataWithSmoothing(hands, smoothInterval);
   }
 
   /**
-   * Calculate BB/100 data with smoothing
+   * Calculate BB/100 data with optimized smoothing for trend analysis
+   * @param hands - Array of poker hands to process  
+   * @param smoothInterval - Interval for BB/100 sampling (default from constants)
    */
   calculateBB100Data(hands: PokerHand[], smoothInterval: number = CHARTS.DEFAULT_BB100_INTERVAL): BB100ChartData {
-    return this.calculateSmoothBB100Data(hands, smoothInterval);
+    return this.processBB100DataWithSmoothing(hands, smoothInterval);
   }
 
   /**
-   * Calculate street-based profit statistics for bar chart
+   * Calculate street-based profit statistics for bar chart visualization
+   * Optimized with pre-defined categories for better performance
+   * @param hands - Array of poker hands to process
    */
   calculateStreetProfitData(hands: PokerHand[]): StreetProfitBarData {
     const dataPoints: StreetProfitStats[] = [];
     
-    // Define the exact order you want
-    const categories = [
-      { street: 'preflop', result: 'win', label: 'Preflop Win' },
-      { street: 'preflop', result: 'loss', label: 'Preflop Loss' },
-      { street: 'flop', result: 'win', label: 'Flop Win' },
-      { street: 'flop', result: 'loss', label: 'Flop Loss' },
-      { street: 'turn', result: 'win', label: 'Turn Win' },
-      { street: 'turn', result: 'loss', label: 'Turn Loss' },
-      { street: 'river', result: 'win', label: 'River Win' },
-      { street: 'river', result: 'loss', label: 'River Loss' },
-      { street: 'showdown', result: 'win', label: 'Showdown Win' },
-      { street: 'showdown', result: 'loss', label: 'Showdown Loss' }
-    ];
-    
-    for (const category of categories) {
-      const filteredHands = hands.filter(hand => {
-        // Match street
-        if (hand.final_stage !== category.street) return false;
-        
-        // Match result (win/loss)
-        if (category.result === 'win') {
-          return hand.hero_hand_result === 'showdown_win' || hand.hero_hand_result === 'no_showdown_win';
-        } else {
-          return hand.hero_hand_result === 'showdown_loss' || hand.hero_hand_result === 'no_showdown_loss';
-        }
-      });
-      
-      const totalProfit = filteredHands.reduce((sum, hand) => sum + hand.hero_profit, 0);
+    // Use pre-defined categories for better performance and consistency
+    for (const category of ChartCalculator.STREET_CATEGORIES) {
+      const filteredHands = this.filterHandsByStreetAndResult(hands, category.street, category.result);
+      const totalProfit = this.calculateTotalProfit(filteredHands);
       
       dataPoints.push({
         category: category.label,
@@ -94,7 +94,7 @@ export class ChartCalculator {
   /**
    * Calculate smooth profit data with interval-based averaging
    */
-  private calculateSmoothProfitData(hands: PokerHand[], interval: number): ProfitChartData {
+  private processProfitDataWithSmoothing(hands: PokerHand[], interval: number): ProfitChartData {
     const result: ProfitChartData = {
       allHandsWithRake: [],
       allHandsActual: [],
@@ -132,7 +132,7 @@ export class ChartCalculator {
   /**
    * Calculate smooth BB/100 data with interval-based averaging
    */
-  private calculateSmoothBB100Data(hands: PokerHand[], interval: number): BB100ChartData {
+  private processBB100DataWithSmoothing(hands: PokerHand[], interval: number): BB100ChartData {
     const result: BB100ChartData = {
       allHandsWithRakeBB100: [],
       allHandsActualBB100: [],
@@ -375,12 +375,27 @@ export class ChartCalculator {
   }
 
   /**
-   * Format category label for display
+   * Filter hands by street and result
    */
-  private formatCategoryLabel(category: string): string {
-    const [street, result] = category.split('_');
-    const streetFormatted = street.charAt(0).toUpperCase() + street.slice(1);
-    const resultFormatted = result.charAt(0).toUpperCase() + result.slice(1);
-    return `${streetFormatted} ${resultFormatted}`;
+  private filterHandsByStreetAndResult(hands: PokerHand[], street: string, result: string): PokerHand[] {
+    return hands.filter(hand => {
+      // Match street
+      if (hand.final_stage !== street) return false;
+      
+      // Match result (win/loss)
+      if (result === 'win') {
+        return hand.hero_hand_result === 'showdown_win' || hand.hero_hand_result === 'no_showdown_win';
+      } else {
+        return hand.hero_hand_result === 'showdown_loss' || hand.hero_hand_result === 'no_showdown_loss';
+      }
+    });
   }
+
+  /**
+   * Calculate total profit for a filtered set of hands
+   */
+  private calculateTotalProfit(filteredHands: PokerHand[]): number {
+    return filteredHands.reduce((sum, hand) => sum + hand.hero_profit, 0);
+  }
+
 } 

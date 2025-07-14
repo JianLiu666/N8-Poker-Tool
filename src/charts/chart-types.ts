@@ -6,7 +6,6 @@ export {
   BB100ChartData,
   ChartGenerationResult,
   ChartConfig,
-  ChartType,
   YAxisRange,
   StatisticsData,
   FinalStatistics,

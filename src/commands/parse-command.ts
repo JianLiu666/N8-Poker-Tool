@@ -35,9 +35,17 @@ import {
   isUniqueConstraintError
 } from '../utils';
 
+/**
+ * Parse command for processing poker hand log files
+ * Optimized for performance with batch processing and efficient memory usage
+ */
 export class ParseCommand {
-  private sqliteManager: SqliteManager;
-  private options: ParseCommandOptions;
+  // Constants for better performance and maintainability
+  private static readonly BATCH_SIZE = 100; // Process hands in batches for better performance
+  private static readonly MAX_RETRIES = 3; // Maximum retries for failed operations
+  
+  private readonly sqliteManager: SqliteManager;
+  private readonly options: ParseCommandOptions;
 
   constructor(options: ParseCommandOptions) {
     this.options = options;

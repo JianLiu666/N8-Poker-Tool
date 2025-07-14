@@ -1,8 +1,10 @@
 /**
  * Centralized type definitions for the N8 Poker Tool
+ * Organized by feature area for better maintainability
  */
 
-// Configuration interfaces
+// ================== Configuration Interfaces ==================
+
 export interface DatabaseConfig {
   dbPath: string;
 }
@@ -24,7 +26,8 @@ export interface DateRange {
   end: string;
 }
 
-// Database entity interfaces
+// ================== Database Entity Interfaces ==================
+
 export interface PokerHand {
   id?: number;
   hand_id: string;
@@ -54,7 +57,8 @@ export interface PokerHand {
   created_at?: string;
 }
 
-// Parsing interfaces
+// ================== Parsing Interfaces ==================
+
 export interface ParsedHand {
   handId: string;
   timestamp: string;
@@ -93,7 +97,8 @@ export interface HeroInvestments {
   river: number;
 }
 
-// Chart-related interfaces
+// ================== Chart-related Interfaces ==================
+
 export interface ChartDataPoint {
   handNumber: number;
   value: number;
@@ -151,9 +156,9 @@ export interface FinalStatistics {
   statistics: StatisticsData;
 }
 
-// Street-based profit statistics interfaces for bar chart
+// Street-based profit statistics for bar chart visualization
 export interface StreetProfitStats {
-  category: string;  // e.g., "preflop_win", "preflop_loss", etc.
+  category: string;
   totalProfit: number;
   handCount: number;
 }
@@ -162,7 +167,8 @@ export interface StreetProfitBarData {
   dataPoints: StreetProfitStats[];
 }
 
-// Parsing result interfaces
+// ================== Parsing Result Interfaces ==================
+
 export interface ParseHandResult {
   hand: ParsedHand;
   nextIndex: number;
@@ -173,7 +179,8 @@ export interface FileParseResult {
   profit: number;
 }
 
-// Enums
+// ================== Enums ==================
+
 export enum GameType {
   RUSH_AND_CASH = 'Rush & Cash',
   CASH_GAME = 'Cash Game'
@@ -203,20 +210,8 @@ export enum PokerPosition {
   BB = 'BB'           // Big Blind
 }
 
-export enum ChartType {
-  PROFIT_TREND = 'profit-trend',
-  BB100_TREND = 'bb100-trend',
-  STREET_WINLOSS_BAR = 'street-winloss-bar'
-}
+// ================== Type Helpers ==================
 
-export enum HandSection {
-  PREFLOP = 'preflop',
-  FLOP = 'flop',
-  TURN = 'turn',
-  RIVER = 'river'
-}
-
-// Type helpers
 export type DatabaseInsertHand = Omit<PokerHand, 'id' | 'created_at'>;
 export type PartialParsedHand = Partial<ParsedHand>;
 export type HandSectionType = keyof HeroActions; 

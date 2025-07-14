@@ -17,104 +17,90 @@ import { formatTimestamp, ensureDirectoryExists } from '../utils';
 // Register Chart.js components
 Chart.register(...registerables);
 
+/**
+ * Chart generator class responsible for creating visual charts from poker data
+ * Supports line charts for trends and bar charts for categorical data
+ */
 export class ChartGenerator {
-  private outputDir: string;
+  private readonly outputDir: string;
 
   constructor(outputDir: string) {
     this.outputDir = outputDir;
   }
 
   /**
-   * Generate profit trend chart
+   * Generate profit trend chart showing cumulative profit over time
    */
   async generateProfitChart(data: ProfitChartData): Promise<ChartGenerationResult> {
-    const config = this.createProfitChartConfig();
+    const config = this.createChartConfig('profit');
     const chartConfig = this.buildProfitChartConfiguration(data, config);
     
-    return this.renderChart(chartConfig, config, {
-      'Profit without rake': this.getLastValue(data.allHandsWithRake),
-      'Actual profit (after rake)': this.getLastValue(data.allHandsActual),
-      'Showdown profit': this.getLastValue(data.showdownOnly),
-      'No showdown profit': this.getLastValue(data.noShowdownOnly)
-    });
-  }
-
-  /**
-   * Generate BB/100 trend chart
-   */
-  async generateBB100Chart(data: BB100ChartData): Promise<ChartGenerationResult> {
-    const config = this.createBB100ChartConfig();
-    const yAxisRange = this.calculateBB100YAxisRange(data);
-    const chartConfig = this.buildBB100ChartConfiguration(data, config, yAxisRange);
-    
-    return this.renderChart(chartConfig, config, {
-      'Profit without rake BB/100': this.getLastValue(data.allHandsWithRakeBB100),
-      'Actual profit BB/100': this.getLastValue(data.allHandsActualBB100),
-      'Showdown BB/100': this.getLastValue(data.showdownOnlyBB100),
-      'No showdown BB/100': this.getLastValue(data.noShowdownOnlyBB100)
-    });
-  }
-
-  /**
-   * Generate street-based profit bar chart
-   */
-  async generateStreetProfitChart(data: StreetProfitBarData): Promise<ChartGenerationResult> {
-    const config = this.createStreetProfitChartConfig();
-    const chartConfig = this.buildStreetProfitChartConfiguration(data, config);
-    const finalValues = this.calculateStreetProfitFinalValues(data.dataPoints);
-    
+    const finalValues = this.extractProfitFinalValues(data);
     return this.renderChart(chartConfig, config, finalValues);
   }
 
   /**
-   * Create profit chart configuration
+   * Generate BB/100 trend chart with dynamic Y-axis scaling
    */
-  private createProfitChartConfig(): ChartConfig {
-    const timestamp = formatTimestamp();
-    return {
-      width: CHARTS.DEFAULT_WIDTH,
-      height: CHARTS.DEFAULT_HEIGHT,
-      title: 'Poker Profit Trend Analysis',
-      xAxisLabel: 'Hands',
-      yAxisLabel: 'Cumulative Profit',
-      fileName: `poker-profit-chart-${timestamp}${CHARTS.DEFAULT_FILE_EXTENSION}`
-    };
+  async generateBB100Chart(data: BB100ChartData): Promise<ChartGenerationResult> {
+    const config = this.createChartConfig('bb100');
+    const yAxisRange = this.calculateOptimalYAxisRange(data);
+    const chartConfig = this.buildBB100ChartConfiguration(data, config, yAxisRange);
+    
+    const finalValues = this.extractBB100FinalValues(data);
+    return this.renderChart(chartConfig, config, finalValues);
   }
 
   /**
-   * Create BB/100 chart configuration
+   * Generate street-based profit bar chart with conditional coloring
    */
-  private createBB100ChartConfig(): ChartConfig {
-    const timestamp = formatTimestamp();
-    return {
-      width: CHARTS.DEFAULT_WIDTH,
-      height: CHARTS.DEFAULT_HEIGHT,
-      title: 'Poker BB/100 Trend Analysis',
-      xAxisLabel: 'Hands',
-      yAxisLabel: 'BB/100',
-      fileName: `poker-bb100-chart-${timestamp}${CHARTS.DEFAULT_FILE_EXTENSION}`
-    };
+  async generateStreetProfitChart(data: StreetProfitBarData): Promise<ChartGenerationResult> {
+    const config = this.createChartConfig('street-profit');
+    const chartConfig = this.buildBarChartConfiguration(data, config);
+    
+    const finalValues = this.extractStreetProfitFinalValues(data.dataPoints);
+    return this.renderChart(chartConfig, config, finalValues);
   }
 
   /**
-   * Create street profit chart configuration
+   * Create standardized chart configuration based on chart type
    */
-  private createStreetProfitChartConfig(): ChartConfig {
+  private createChartConfig(type: 'profit' | 'bb100' | 'street-profit'): ChartConfig {
     const timestamp = formatTimestamp();
+    const configs = {
+      'profit': {
+        title: 'Poker Profit Trend Analysis',
+        xAxisLabel: 'Hands',
+        yAxisLabel: 'Cumulative Profit',
+        fileName: `poker-profit-chart-${timestamp}`
+      },
+      'bb100': {
+        title: 'Poker BB/100 Trend Analysis',
+        xAxisLabel: 'Hands',
+        yAxisLabel: 'BB/100',
+        fileName: `poker-bb100-chart-${timestamp}`
+      },
+      'street-profit': {
+        title: 'Poker Street Profit Analysis',
+        xAxisLabel: 'Street Categories',
+        yAxisLabel: 'Cumulative Profit',
+        fileName: `poker-street-profit-chart-${timestamp}`
+      }
+    };
+
+    const baseConfig = configs[type];
     return {
       width: CHARTS.DEFAULT_WIDTH,
       height: CHARTS.DEFAULT_HEIGHT,
-      title: 'Poker Street Profit Analysis',
-      xAxisLabel: 'Street Categories',
-      yAxisLabel: 'Cumulative Profit',
-      fileName: `poker-street-profit-chart-${timestamp}${CHARTS.DEFAULT_FILE_EXTENSION}`
+      ...baseConfig,
+      fileName: `${baseConfig.fileName}${CHARTS.DEFAULT_FILE_EXTENSION}`
     };
   }
 
   /**
    * Build profit chart configuration
    */
-  private buildProfitChartConfiguration(data: ProfitChartData, config: ChartConfig): ChartConfiguration {
+  private buildProfitChartConfiguration(data: ProfitChartData, config: ChartConfig, yAxisRange?: YAxisRange): ChartConfiguration {
     return {
       type: 'line',
       data: {
@@ -145,7 +131,7 @@ export class ChartGenerator {
           )
         ]
       },
-      options: this.createChartOptions(config)
+      options: this.createChartOptions(config, yAxisRange)
     };
   }
 
@@ -190,7 +176,7 @@ export class ChartGenerator {
   /**
    * Build street profit chart configuration
    */
-  private buildStreetProfitChartConfiguration(data: StreetProfitBarData, config: ChartConfig): ChartConfiguration {
+  private buildBarChartConfiguration(data: StreetProfitBarData, config: ChartConfig): ChartConfiguration {
     return {
       type: 'bar',
       data: {
@@ -312,28 +298,9 @@ export class ChartGenerator {
   }
 
   /**
-   * Create dataset for bar charts
-   */
-  private createBarDataset(label: string, dataPoints: number[], backgroundColor: string, borderColor: string) {
-    return {
-      label,
-      data: dataPoints,
-      backgroundColor,
-      borderColor,
-      borderWidth: 1,
-      barPercentage: 0.8,
-      categoryPercentage: 0.8,
-      borderRadius: 5,
-      hoverBackgroundColor: backgroundColor,
-      hoverBorderColor: borderColor,
-      hoverBorderWidth: 2
-    };
-  }
-
-  /**
    * Calculate Y-axis range for BB/100 data
    */
-  private calculateBB100YAxisRange(data: BB100ChartData): YAxisRange {
+  private calculateOptimalYAxisRange(data: BB100ChartData): YAxisRange {
     const allValues = this.getAllBB100Values(data);
 
     if (allValues.length === 0) {
@@ -377,12 +344,24 @@ export class ChartGenerator {
   /**
    * Calculate final values for street profit chart
    */
-  private calculateStreetProfitFinalValues(stats: StreetProfitStats[]): Record<string, number> {
+  private extractStreetProfitFinalValues(stats: StreetProfitStats[]): Record<string, number> {
     const finalValues: Record<string, number> = {};
     stats.forEach(stat => {
       finalValues[stat.category] = stat.totalProfit;
     });
     return finalValues;
+  }
+
+  /**
+   * Calculate final values for BB/100 chart
+   */
+  private extractBB100FinalValues(data: BB100ChartData): Record<string, number> {
+    return {
+      'Profit without rake BB/100': this.getLastValue(data.allHandsWithRakeBB100),
+      'Actual profit BB/100': this.getLastValue(data.allHandsActualBB100),
+      'Showdown BB/100': this.getLastValue(data.showdownOnlyBB100),
+      'No Showdown BB/100': this.getLastValue(data.noShowdownOnlyBB100)
+    };
   }
 
   /**
@@ -406,34 +385,6 @@ export class ChartGenerator {
       },
       elements: {
         line: {
-          borderJoinStyle: 'round' as const
-        }
-      }
-    };
-  }
-
-  /**
-   * Create bar chart options with standardized styling
-   */
-  private createBarChartOptions(config: ChartConfig, title: string) {
-    return {
-      responsive: false,
-      animation: false as const,
-      layout: {
-        padding: 0
-      },
-      backgroundColor: CHARTS.BACKGROUND_COLOR,
-      scales: {
-        x: this.createXAxisConfig(config.xAxisLabel),
-        y: this.createYAxisConfig(config.yAxisLabel)
-      },
-      plugins: {
-        title: this.createTitleConfig(title),
-        legend: this.createLegendConfig()
-      },
-      elements: {
-        bar: {
-          borderRadius: 5,
           borderJoinStyle: 'round' as const
         }
       }
@@ -630,5 +581,17 @@ export class ChartGenerator {
    */
   private getLastValue(dataPoints: ChartDataPoint[]): number {
     return dataPoints.length > 0 ? dataPoints[dataPoints.length - 1].value : 0;
+  }
+
+  /**
+   * Extract final values for profit charts
+   */
+  private extractProfitFinalValues(data: ProfitChartData): Record<string, number> {
+    return {
+      'Profit without rake': this.getLastValue(data.allHandsWithRake),
+      'Actual profit (after rake)': this.getLastValue(data.allHandsActual),
+      'Showdown profit': this.getLastValue(data.showdownOnly),
+      'No showdown profit': this.getLastValue(data.noShowdownOnly)
+    };
   }
 } 

@@ -1,39 +1,69 @@
 /**
  * Application-wide constants for the N8 Poker Tool
+ * Organized by feature area for better maintainability
  */
 
-// File patterns
+// ================== File & Path Constants ==================
+
 export const FILE_PATTERNS = {
   LOG_FILE_EXTENSION: '.txt',
   CHART_FILE_EXTENSION: '.jpg'
 } as const;
 
-// Database configuration
 export const DATABASE = {
   DEFAULT_PATH: './data/poker.db',
   TABLE_NAME: 'poker_hands'
 } as const;
 
-// Chart configuration
+// ================== Chart Configuration ==================
+
 export const CHARTS = {
+  // Output settings
   DEFAULT_OUTPUT_DIR: './charts',
+  DEFAULT_FILE_EXTENSION: '.jpg',
+  BACKGROUND_COLOR: '#FFFFFF',
+  
+  // Dimensions and quality
   DEFAULT_WIDTH: 1200,
   DEFAULT_HEIGHT: 800,
   DEFAULT_QUALITY: 0.95,
+  
+  // Data processing settings
   DEFAULT_SAMPLING_INTERVAL: 1,
-  DEFAULT_BB100_INTERVAL: 100,
-  DEFAULT_FILE_EXTENSION: '.jpg',
-  BACKGROUND_COLOR: '#FFFFFF'
+  DEFAULT_BB100_INTERVAL: 100
 } as const;
 
-// Poker-specific constants
+// Chart colors with semantic naming
+export const CHART_COLORS = {
+  // Line chart colors
+  PROFIT_WITHOUT_RAKE: 'rgba(134, 239, 172, 0.6)',
+  ACTUAL_PROFIT: 'rgb(34, 197, 94)',
+  SHOWDOWN_PROFIT: 'rgb(59, 130, 246)',
+  NO_SHOWDOWN_PROFIT: 'rgb(239, 68, 68)',
+  
+  // Bar chart colors
+  BAR_WINS: 'rgba(34, 197, 94, 0.8)',
+  BAR_LOSSES: 'rgba(239, 68, 68, 0.8)',
+  BAR_WINS_BORDER: 'rgb(34, 197, 94)',
+  BAR_LOSSES_BORDER: 'rgb(239, 68, 68)',
+  
+  // General styling
+  BACKGROUND_ALPHA: 0.1,
+  BAR_BACKGROUND_ALPHA: 0.8,
+  BORDER_WIDTH: 2
+} as const;
+
+// ================== Poker-specific Constants ==================
+
 export const POKER = {
   MAX_PLAYERS: 6,
   POSITION_COUNT: 6,
   DECIMAL_PRECISION: 2
 } as const;
 
-// Regex patterns for parsing
+// ================== Parsing Constants ==================
+
+// Regex patterns for parsing poker hand logs
 export const PATTERNS = {
   HAND_HEADER: /Poker Hand #([^:]+): Hold'em No Limit \(\$([0-9.]+)\/\$([0-9.]+)\) - (.+)/,
   TABLE_INFO: /Table '([^']+)'/,
@@ -41,6 +71,8 @@ export const PATTERNS = {
   HERO_SEAT: /Seat (\d+): Hero \(\$([0-9.]+) in chips\)/,
   HOLE_CARDS: /Dealt to Hero \[([^\]]+)\]/,
   CARDS_IN_BRACKETS: /\[([^\]]+)\]/g,
+  
+  // Amount parsing patterns
   AMOUNT_PATTERNS: {
     POSTS_SMALL_BLIND: /posts small blind \$([0-9.]+)/,
     POSTS_BIG_BLIND: /posts big blind \$([0-9.]+)/,
@@ -56,7 +88,7 @@ export const PATTERNS = {
   }
 } as const;
 
-// Section identifiers for hand parsing
+// Hand section identifiers
 export const HAND_SECTIONS = {
   FLOP: '*** FLOP ***',
   TURN: '*** TURN ***',
@@ -64,7 +96,7 @@ export const HAND_SECTIONS = {
   SUMMARY: '*** SUMMARY ***'
 } as const;
 
-// Action codes
+// Action codes for poker actions
 export const ACTION_CODES = {
   FOLD: 'F',
   CHECK: 'X',
@@ -73,23 +105,9 @@ export const ACTION_CODES = {
   RAISE: 'R'
 } as const;
 
-// Chart colors
-export const CHART_COLORS = {
-  PROFIT_WITHOUT_RAKE: 'rgba(134, 239, 172, 0.6)',
-  ACTUAL_PROFIT: 'rgb(34, 197, 94)',
-  SHOWDOWN_PROFIT: 'rgb(59, 130, 246)',
-  NO_SHOWDOWN_PROFIT: 'rgb(239, 68, 68)',
-  BACKGROUND_ALPHA: 0.1,
-  BORDER_WIDTH: 2,
-  // Bar chart colors
-  BAR_WINS: 'rgba(34, 197, 94, 0.8)',
-  BAR_LOSSES: 'rgba(239, 68, 68, 0.8)',
-  BAR_WINS_BORDER: 'rgb(34, 197, 94)',
-  BAR_LOSSES_BORDER: 'rgb(239, 68, 68)',
-  BAR_BACKGROUND_ALPHA: 0.8
-} as const;
+// ================== Logging Constants ==================
 
-// Logging emojis for consistent output
+// Emojis for consistent console output
 export const LOG_EMOJIS = {
   START: '🚀',
   SUCCESS: '✅',

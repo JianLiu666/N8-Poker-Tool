@@ -145,6 +145,12 @@ export class ChartCommand {
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext('2d');
 
+    // 先繪製白色背景，確保JPG格式輸出時背景為白色
+    ctx.save();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, width, height);
+    ctx.restore();
+
     const config: ChartConfiguration = {
       type: 'line',
       data: {
@@ -155,8 +161,8 @@ export class ChartCommand {
               x: point.handNumber,
               y: point.cumulativeProfit
             })),
-            borderColor: 'rgb(75, 192, 192)',
-            backgroundColor: 'rgba(75, 192, 192, 0.1)',
+            borderColor: 'rgb(34, 197, 94)', // 綠色
+            backgroundColor: 'rgba(34, 197, 94, 0.1)',
             borderWidth: 2,
             fill: false,
             tension: 0.1,
@@ -169,8 +175,8 @@ export class ChartCommand {
               x: point.handNumber,
               y: point.cumulativeProfit
             })),
-            borderColor: 'rgb(255, 99, 132)',
-            backgroundColor: 'rgba(255, 99, 132, 0.1)',
+            borderColor: 'rgb(59, 130, 246)', // 藍色
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
             borderWidth: 2,
             fill: false,
             tension: 0.1,
@@ -183,8 +189,8 @@ export class ChartCommand {
               x: point.handNumber,
               y: point.cumulativeProfit
             })),
-            borderColor: 'rgb(54, 162, 235)',
-            backgroundColor: 'rgba(54, 162, 235, 0.1)',
+            borderColor: 'rgb(239, 68, 68)', // 紅色
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
             borderWidth: 2,
             fill: false,
             tension: 0.1,
@@ -196,7 +202,10 @@ export class ChartCommand {
       options: {
         responsive: false,
         animation: false,
-        backgroundColor: 'white', // 設定白色背景
+        layout: {
+          padding: 0
+        },
+        backgroundColor: '#FFFFFF',  // 明確設定圖表背景為白色
         scales: {
           x: {
             type: 'linear',
@@ -273,13 +282,34 @@ export class ChartCommand {
 
     const chart = new Chart(ctx as any, config);
 
+    // 等待圖表完全渲染
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // 在保存前，確保背景仍然是白色（針對JPG格式）
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const pixelData = imageData.data;
+    
+    // 創建新的畫布來確保白色背景
+    const finalCanvas = createCanvas(width, height);
+    const finalCtx = finalCanvas.getContext('2d');
+    
+    // 繪製白色背景
+    finalCtx.fillStyle = '#FFFFFF';
+    finalCtx.fillRect(0, 0, width, height);
+    
+    // 繪製原圖表內容
+    finalCtx.drawImage(canvas, 0, 0);
+
     // 生成文件名包含時間戳
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
-    const fileName = `poker-profit-chart-${timestamp}.png`;
+    const fileName = `poker-profit-chart-${timestamp}.jpg`;
     const filePath = path.join(this.outputDir, fileName);
 
-    // 保存圖表為 PNG 文件
-    const buffer = canvas.toBuffer('image/png');
+    // 保存圖表為 JPG 文件（使用最終畫布確保白色背景）
+    const buffer = finalCanvas.toBuffer('image/jpeg', { 
+      quality: 0.95,
+      chromaSubsampling: false
+    });
     await fs.writeFile(filePath, buffer);
 
     console.log(`📈 Chart generated successfully: ${filePath}`);

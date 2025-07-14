@@ -18,12 +18,16 @@ export interface PokerHand {
   flop_cards: string;
   turn_card: string;
   river_card: string;
+  hero_preflop_investment: number;
   hero_flop_investment: number;
   hero_turn_investment: number;
   hero_river_investment: number;
+  hero_preflop_actions: string;
   hero_flop_actions: string;
   hero_turn_actions: string;
   hero_river_actions: string;
+  pot_amount: number;
+  jackpot_amount: number;
   hero_profit: number;
   hero_rake: number;
   hero_hand_result: string;
@@ -143,6 +147,9 @@ export class SqliteManager {
         -- River 開出的一張牌 (例如: "Tc")
         river_card TEXT DEFAULT '',
         
+        -- Hero 在 Preflop 階段的總投入金額
+        hero_preflop_investment REAL DEFAULT 0,
+        
         -- Hero 在 Flop 階段的總投入金額
         hero_flop_investment REAL DEFAULT 0,
         
@@ -152,6 +159,9 @@ export class SqliteManager {
         -- Hero 在 River 階段的總投入金額
         hero_river_investment REAL DEFAULT 0,
         
+        -- Hero 在 Preflop 的動作序列 (X=check, B=bet, C=call, R=raise, F=fold)
+        hero_preflop_actions TEXT DEFAULT '',
+        
         -- Hero 在 Flop 的動作序列 (X=check, B=bet, C=call, R=raise, F=fold)
         hero_flop_actions TEXT DEFAULT '',
         
@@ -160,6 +170,12 @@ export class SqliteManager {
         
         -- Hero 在 River 的動作序列 (X=check, B=bet, C=call, R=raise, F=fold)
         hero_river_actions TEXT DEFAULT '',
+        
+        -- 底池總金額 (未扣除 rake 和 jackpot 的金額)
+        pot_amount REAL DEFAULT 0,
+        
+        -- Jackpot 金額
+        jackpot_amount REAL DEFAULT 0,
         
         -- Hero 在此牌局的實際盈利 (正數為贏錢，負數為輸錢)
         hero_profit REAL DEFAULT 0,
@@ -224,10 +240,10 @@ export class SqliteManager {
       INSERT INTO poker_hands (
         hand_id, hand_start_time, game_type, small_blind, big_blind,
         hero_position, hero_hole_cards, flop_cards, turn_card, river_card,
-        hero_flop_investment, hero_turn_investment, hero_river_investment,
-        hero_flop_actions, hero_turn_actions, hero_river_actions,
-        hero_profit, hero_rake, hero_hand_result, final_stage
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        hero_preflop_investment, hero_flop_investment, hero_turn_investment, hero_river_investment,
+        hero_preflop_actions, hero_flop_actions, hero_turn_actions, hero_river_actions,
+        pot_amount, jackpot_amount, hero_profit, hero_rake, hero_hand_result, final_stage
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     return new Promise((resolve, reject) => {
@@ -242,12 +258,16 @@ export class SqliteManager {
         hand.flop_cards,
         hand.turn_card,
         hand.river_card,
+        hand.hero_preflop_investment,
         hand.hero_flop_investment,
         hand.hero_turn_investment,
         hand.hero_river_investment,
+        hand.hero_preflop_actions,
         hand.hero_flop_actions,
         hand.hero_turn_actions,
         hand.hero_river_actions,
+        hand.pot_amount,
+        hand.jackpot_amount,
         hand.hero_profit,
         hand.hero_rake,
         hand.hero_hand_result,

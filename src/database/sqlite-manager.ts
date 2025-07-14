@@ -15,6 +15,9 @@ export interface PokerHand {
   big_blind: number;
   hero_position: string;
   hero_hole_cards: string;
+  flop_cards: string;
+  turn_card: string;
+  river_card: string;
   hero_flop_investment: number;
   hero_turn_investment: number;
   hero_river_investment: number;
@@ -131,6 +134,15 @@ export class SqliteManager {
         -- Hero 的底牌 (例如: "Ah 2s")
         hero_hole_cards TEXT NOT NULL,
         
+        -- Flop 開出的三張牌 (例如: "3c Th 7d")
+        flop_cards TEXT DEFAULT '',
+        
+        -- Turn 開出的一張牌 (例如: "2d")
+        turn_card TEXT DEFAULT '',
+        
+        -- River 開出的一張牌 (例如: "Tc")
+        river_card TEXT DEFAULT '',
+        
         -- Hero 在 Flop 階段的總投入金額
         hero_flop_investment REAL DEFAULT 0,
         
@@ -211,10 +223,11 @@ export class SqliteManager {
     const sql = `
       INSERT INTO poker_hands (
         hand_id, hand_start_time, game_type, small_blind, big_blind,
-        hero_position, hero_hole_cards, hero_flop_investment, hero_turn_investment,
-        hero_river_investment, hero_flop_actions, hero_turn_actions, hero_river_actions,
+        hero_position, hero_hole_cards, flop_cards, turn_card, river_card,
+        hero_flop_investment, hero_turn_investment, hero_river_investment,
+        hero_flop_actions, hero_turn_actions, hero_river_actions,
         hero_profit, hero_rake, hero_hand_result, final_stage
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     return new Promise((resolve, reject) => {
@@ -226,6 +239,9 @@ export class SqliteManager {
         hand.big_blind,
         hand.hero_position,
         hand.hero_hole_cards,
+        hand.flop_cards,
+        hand.turn_card,
+        hand.river_card,
         hand.hero_flop_investment,
         hand.hero_turn_investment,
         hand.hero_river_investment,

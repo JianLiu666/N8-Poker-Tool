@@ -120,12 +120,20 @@ export class ParseCommand {
     
     const hands: ParsedHand[] = [];
     let i = 0;
+    let skippedHands = 0;
     
     while (i < lines.length) {
       if (lines[i].startsWith('Poker Hand #')) {
         const hand = this.parseCompleteHand(lines, i);
         if (hand) {
-          hands.push(hand.hand);
+          // 檢查這個手牌是否已經存在於資料庫中
+          const existingHand = await this.sqliteManager.getPokerHandById(hand.hand.handId);
+          if (existingHand) {
+            console.log(`⏭️  Skipping already parsed hand: ${hand.hand.handId}`);
+            skippedHands++;
+          } else {
+            hands.push(hand.hand);
+          }
           i = hand.nextIndex;
         } else {
           i++;
@@ -140,6 +148,10 @@ export class ParseCommand {
     for (const hand of hands) {
       await this.saveHandToDatabase(hand);
       totalProfit += hand.heroProfit;
+    }
+
+    if (skippedHands > 0) {
+      console.log(`⏭️  Skipped ${skippedHands} already parsed hands from ${path.basename(filePath)}`);
     }
 
     return { handsParsed: hands.length, profit: totalProfit };
@@ -329,7 +341,7 @@ export class ParseCommand {
           hand.heroInvestments[section] + parseFloat(callMatch[1])
         );
       }
-    } else if (line.includes('bets') || line.includes('and is all-in')) {
+    } else if (line.includes('bets') && !line.includes('raises')) {
       hand.heroActions[section].push('B');
       const betMatch = line.match(/bets \$([0-9.]+)/);
       if (betMatch) {
@@ -492,6 +504,13 @@ export class ParseCommand {
   }
 
   private async saveHandToDatabase(hand: ParsedHand): Promise<void> {
+    // 再次檢查以確保不重複插入（雙重保護）
+    const existingHand = await this.sqliteManager.getPokerHandById(hand.handId);
+    if (existingHand) {
+      console.log(`⚠️  Hand ${hand.handId} already exists in database, skipping...`);
+      return;
+    }
+
     const dbHand: Omit<PokerHand, 'id' | 'created_at'> = {
       hand_id: hand.handId,
       hand_start_time: hand.timestamp,
@@ -519,6 +538,16 @@ export class ParseCommand {
       final_stage: hand.finalStage
     };
 
-    await this.sqliteManager.insertPokerHand(dbHand);
+    try {
+      await this.sqliteManager.insertPokerHand(dbHand);
+      console.log(`✅ Successfully saved hand: ${hand.handId}`);
+    } catch (error) {
+      // 如果是 UNIQUE constraint 錯誤，則忽略（表示已存在）
+      if (error instanceof Error && error.message.includes('UNIQUE constraint failed')) {
+        console.log(`⚠️  Hand ${hand.handId} already exists (UNIQUE constraint), skipping...`);
+      } else {
+        throw error;
+      }
+    }
   }
 } 

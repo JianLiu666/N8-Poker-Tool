@@ -9,5 +9,7 @@ export {
   ChartType,
   YAxisRange,
   StatisticsData,
-  FinalStatistics
+  FinalStatistics,
+  StreetProfitStats,
+  StreetProfitBarData
 } from '../types'; 

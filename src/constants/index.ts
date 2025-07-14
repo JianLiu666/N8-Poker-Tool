@@ -80,7 +80,13 @@ export const CHART_COLORS = {
   SHOWDOWN_PROFIT: 'rgb(59, 130, 246)',
   NO_SHOWDOWN_PROFIT: 'rgb(239, 68, 68)',
   BACKGROUND_ALPHA: 0.1,
-  BORDER_WIDTH: 2
+  BORDER_WIDTH: 2,
+  // Bar chart colors
+  BAR_WINS: 'rgba(34, 197, 94, 0.8)',
+  BAR_LOSSES: 'rgba(239, 68, 68, 0.8)',
+  BAR_WINS_BORDER: 'rgb(34, 197, 94)',
+  BAR_LOSSES_BORDER: 'rgb(239, 68, 68)',
+  BAR_BACKGROUND_ALPHA: 0.8
 } as const;
 
 // Logging emojis for consistent output

@@ -38,11 +38,12 @@ export class ChartCommand {
 
       // Calculate data and generate charts
       const { profitData, bb100Data } = this.calculateChartData(hands);
-      const { profitResult, bb100Result } = await this.generateCharts(profitData, bb100Data);
+      const streetProfitData = this.chartCalculator.calculateStreetProfitData(hands);
+      const { profitResult, bb100Result, streetProfitResult } = await this.generateCharts(profitData, bb100Data, streetProfitData);
       const statistics = this.chartCalculator.getFinalStatistics(profitData, bb100Data);
 
       // Output results
-      this.logResults(profitResult, bb100Result, statistics);
+      this.logResults(profitResult, bb100Result, streetProfitResult, statistics);
       console.log(`${LOG_EMOJIS.SUCCESS} Chart command completed successfully!`);
       
     } catch (error) {
@@ -89,9 +90,9 @@ export class ChartCommand {
   }
 
   /**
-   * Generate both profit and BB/100 charts
+   * Generate profit, BB/100 and street profit charts
    */
-  private async generateCharts(profitData: any, bb100Data: any) {
+  private async generateCharts(profitData: any, bb100Data: any, streetProfitData: any) {
     const interval = this.options.interval || CHARTS.DEFAULT_SAMPLING_INTERVAL;
     
     console.log(`${LOG_EMOJIS.CHART} Generating profit trend chart (interval: ${interval} hands)...`);
@@ -100,16 +101,20 @@ export class ChartCommand {
     console.log(`${LOG_EMOJIS.CHART} Generating BB/100 trend chart (interval: ${interval} hands)...`);
     const bb100Result = await this.chartGenerator.generateBB100Chart(bb100Data);
 
-    return { profitResult, bb100Result };
+    console.log(`${LOG_EMOJIS.CHART} Generating Street Profit bar chart...`);
+    const streetProfitResult = await this.chartGenerator.generateStreetProfitChart(streetProfitData);
+
+    return { profitResult, bb100Result, streetProfitResult };
   }
 
   /**
    * Log the results of chart generation
    */
-  private logResults(profitResult: any, bb100Result: any, statistics: FinalStatistics): void {
+  private logResults(profitResult: any, bb100Result: any, streetProfitResult: any, statistics: FinalStatistics): void {
     console.log(`${LOG_EMOJIS.CHART} Charts generated successfully:`);
     console.log(`   - Profit chart: ${profitResult.filePath}`);
     console.log(`   - BB/100 chart: ${bb100Result.filePath}`);
+    console.log(`   - Street Profit chart: ${streetProfitResult.filePath}`);
     
     this.logStatistics(statistics);
   }
@@ -133,5 +138,7 @@ export class ChartCommand {
       console.log(`   - BB/100 showdown: ${stats.bb100Showdown.toFixed(2)}`);
       console.log(`   - BB/100 no-showdown: ${stats.bb100NoShowdown.toFixed(2)}`);
     }
+    
+    console.log(`${LOG_EMOJIS.INFO} Street Profit Bar Chart created with cumulative profit statistics for each street and result combination`);
   }
 } 

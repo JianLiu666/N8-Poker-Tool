@@ -4,7 +4,9 @@ import {
   ProfitChartData, 
   BB100ChartData, 
   FinalStatistics,
-  StatisticsData 
+  StatisticsData,
+  StreetProfitStats,
+  StreetProfitBarData
 } from './chart-types';
 import { CHARTS } from '../constants';
 import { roundToDecimals, isShowdownResult } from '../utils';
@@ -23,6 +25,51 @@ export class ChartCalculator {
    */
   calculateBB100Data(hands: PokerHand[], smoothInterval: number = CHARTS.DEFAULT_BB100_INTERVAL): BB100ChartData {
     return this.calculateSmoothBB100Data(hands, smoothInterval);
+  }
+
+  /**
+   * Calculate street-based profit statistics for bar chart
+   */
+  calculateStreetProfitData(hands: PokerHand[]): StreetProfitBarData {
+    const dataPoints: StreetProfitStats[] = [];
+    
+    // Define the exact order you want
+    const categories = [
+      { street: 'preflop', result: 'win', label: 'Preflop Win' },
+      { street: 'preflop', result: 'loss', label: 'Preflop Loss' },
+      { street: 'flop', result: 'win', label: 'Flop Win' },
+      { street: 'flop', result: 'loss', label: 'Flop Loss' },
+      { street: 'turn', result: 'win', label: 'Turn Win' },
+      { street: 'turn', result: 'loss', label: 'Turn Loss' },
+      { street: 'river', result: 'win', label: 'River Win' },
+      { street: 'river', result: 'loss', label: 'River Loss' },
+      { street: 'showdown', result: 'win', label: 'Showdown Win' },
+      { street: 'showdown', result: 'loss', label: 'Showdown Loss' }
+    ];
+    
+    for (const category of categories) {
+      const filteredHands = hands.filter(hand => {
+        // Match street
+        if (hand.final_stage !== category.street) return false;
+        
+        // Match result (win/loss)
+        if (category.result === 'win') {
+          return hand.hero_hand_result === 'showdown_win' || hand.hero_hand_result === 'no_showdown_win';
+        } else {
+          return hand.hero_hand_result === 'showdown_loss' || hand.hero_hand_result === 'no_showdown_loss';
+        }
+      });
+      
+      const totalProfit = filteredHands.reduce((sum, hand) => sum + hand.hero_profit, 0);
+      
+      dataPoints.push({
+        category: category.label,
+        totalProfit: roundToDecimals(totalProfit, 2),
+        handCount: filteredHands.length
+      });
+    }
+    
+    return { dataPoints };
   }
 
   /**
@@ -325,5 +372,15 @@ export class ChartCalculator {
       bb100Showdown: bb100Data.showdownOnlyBB100[bb100Index]?.value || 0,
       bb100NoShowdown: bb100Data.noShowdownOnlyBB100[bb100Index]?.value || 0
     };
+  }
+
+  /**
+   * Format category label for display
+   */
+  private formatCategoryLabel(category: string): string {
+    const [street, result] = category.split('_');
+    const streetFormatted = street.charAt(0).toUpperCase() + street.slice(1);
+    const resultFormatted = result.charAt(0).toUpperCase() + result.slice(1);
+    return `${streetFormatted} ${resultFormatted}`;
   }
 } 

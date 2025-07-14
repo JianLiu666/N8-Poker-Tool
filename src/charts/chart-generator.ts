@@ -7,7 +7,9 @@ import {
   BB100ChartData, 
   ChartGenerationResult, 
   ChartConfig,
-  YAxisRange
+  YAxisRange,
+  StreetProfitBarData,
+  StreetProfitStats
 } from './chart-types';
 import { CHARTS, CHART_COLORS } from '../constants';
 import { formatTimestamp, ensureDirectoryExists } from '../utils';
@@ -54,6 +56,17 @@ export class ChartGenerator {
   }
 
   /**
+   * Generate street-based profit bar chart
+   */
+  async generateStreetProfitChart(data: StreetProfitBarData): Promise<ChartGenerationResult> {
+    const config = this.createStreetProfitChartConfig();
+    const chartConfig = this.buildStreetProfitChartConfiguration(data, config);
+    const finalValues = this.calculateStreetProfitFinalValues(data.dataPoints);
+    
+    return this.renderChart(chartConfig, config, finalValues);
+  }
+
+  /**
    * Create profit chart configuration
    */
   private createProfitChartConfig(): ChartConfig {
@@ -80,6 +93,21 @@ export class ChartGenerator {
       xAxisLabel: 'Hands',
       yAxisLabel: 'BB/100',
       fileName: `poker-bb100-chart-${timestamp}${CHARTS.DEFAULT_FILE_EXTENSION}`
+    };
+  }
+
+  /**
+   * Create street profit chart configuration
+   */
+  private createStreetProfitChartConfig(): ChartConfig {
+    const timestamp = formatTimestamp();
+    return {
+      width: CHARTS.DEFAULT_WIDTH,
+      height: CHARTS.DEFAULT_HEIGHT,
+      title: 'Poker Street Profit Analysis',
+      xAxisLabel: 'Street Categories',
+      yAxisLabel: 'Cumulative Profit',
+      fileName: `poker-street-profit-chart-${timestamp}${CHARTS.DEFAULT_FILE_EXTENSION}`
     };
   }
 
@@ -160,7 +188,106 @@ export class ChartGenerator {
   }
 
   /**
-   * Create a standardized dataset configuration
+   * Build street profit chart configuration
+   */
+  private buildStreetProfitChartConfiguration(data: StreetProfitBarData, config: ChartConfig): ChartConfiguration {
+    return {
+      type: 'bar',
+      data: {
+        labels: data.dataPoints.map(point => point.category),
+        datasets: [{
+          label: 'Cumulative Profit',
+          data: data.dataPoints.map(point => point.totalProfit),
+          backgroundColor: data.dataPoints.map(point => 
+            point.totalProfit >= 0 ? CHART_COLORS.BAR_WINS : CHART_COLORS.BAR_LOSSES
+          ),
+          borderColor: data.dataPoints.map(point => 
+            point.totalProfit >= 0 ? CHART_COLORS.BAR_WINS_BORDER : CHART_COLORS.BAR_LOSSES_BORDER
+          ),
+          borderWidth: 1,
+          barPercentage: 0.8,
+          categoryPercentage: 0.9
+        }]
+      },
+      options: {
+        responsive: false,
+        animation: false as const,
+        layout: {
+          padding: 20
+        },
+        backgroundColor: CHARTS.BACKGROUND_COLOR,
+        scales: {
+          x: {
+            title: {
+              display: true,
+              text: config.xAxisLabel,
+              font: {
+                size: 14,
+                weight: 'bold'
+              }
+            },
+            ticks: {
+              maxRotation: 45,
+              minRotation: 45,
+              font: {
+                size: 10
+              }
+            },
+            grid: {
+              display: true,
+              color: 'rgba(0, 0, 0, 0.1)'
+            }
+          },
+          y: {
+            title: {
+              display: true,
+              text: config.yAxisLabel,
+              font: {
+                size: 14,
+                weight: 'bold'
+              }
+            },
+            ticks: {
+              font: {
+                size: 12
+              }
+            },
+            grid: {
+              display: true,
+              color: 'rgba(0, 0, 0, 0.1)'
+            },
+            beginAtZero: true
+          }
+        },
+        plugins: {
+          title: {
+            display: true,
+            text: config.title,
+            font: {
+              size: 18,
+              weight: 'bold'
+            },
+            padding: {
+              top: 10,
+              bottom: 30
+            }
+          },
+          legend: {
+            display: true,
+            position: 'top' as const,
+            labels: {
+              font: {
+                size: 12
+              }
+            }
+          }
+        }
+      }
+    };
+  }
+
+  /**
+   * Create dataset for line charts
    */
   private createDataset(
     label: string, 
@@ -181,6 +308,25 @@ export class ChartGenerator {
       tension: 0.1,
       pointRadius: 0,
       pointHoverRadius: 3
+    };
+  }
+
+  /**
+   * Create dataset for bar charts
+   */
+  private createBarDataset(label: string, dataPoints: number[], backgroundColor: string, borderColor: string) {
+    return {
+      label,
+      data: dataPoints,
+      backgroundColor,
+      borderColor,
+      borderWidth: 1,
+      barPercentage: 0.8,
+      categoryPercentage: 0.8,
+      borderRadius: 5,
+      hoverBackgroundColor: backgroundColor,
+      hoverBorderColor: borderColor,
+      hoverBorderWidth: 2
     };
   }
 
@@ -229,6 +375,17 @@ export class ChartGenerator {
   }
 
   /**
+   * Calculate final values for street profit chart
+   */
+  private calculateStreetProfitFinalValues(stats: StreetProfitStats[]): Record<string, number> {
+    const finalValues: Record<string, number> = {};
+    stats.forEach(stat => {
+      finalValues[stat.category] = stat.totalProfit;
+    });
+    return finalValues;
+  }
+
+  /**
    * Create chart options with standardized styling
    */
   private createChartOptions(config: ChartConfig, yAxisRange?: YAxisRange) {
@@ -249,6 +406,34 @@ export class ChartGenerator {
       },
       elements: {
         line: {
+          borderJoinStyle: 'round' as const
+        }
+      }
+    };
+  }
+
+  /**
+   * Create bar chart options with standardized styling
+   */
+  private createBarChartOptions(config: ChartConfig, title: string) {
+    return {
+      responsive: false,
+      animation: false as const,
+      layout: {
+        padding: 0
+      },
+      backgroundColor: CHARTS.BACKGROUND_COLOR,
+      scales: {
+        x: this.createXAxisConfig(config.xAxisLabel),
+        y: this.createYAxisConfig(config.yAxisLabel)
+      },
+      plugins: {
+        title: this.createTitleConfig(title),
+        legend: this.createLegendConfig()
+      },
+      elements: {
+        bar: {
+          borderRadius: 5,
           borderJoinStyle: 'round' as const
         }
       }

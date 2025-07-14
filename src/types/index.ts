@@ -151,6 +151,17 @@ export interface FinalStatistics {
   statistics: StatisticsData;
 }
 
+// Street-based profit statistics interfaces for bar chart
+export interface StreetProfitStats {
+  category: string;  // e.g., "preflop_win", "preflop_loss", etc.
+  totalProfit: number;
+  handCount: number;
+}
+
+export interface StreetProfitBarData {
+  dataPoints: StreetProfitStats[];
+}
+
 // Parsing result interfaces
 export interface ParseHandResult {
   hand: ParsedHand;
@@ -194,7 +205,8 @@ export enum PokerPosition {
 
 export enum ChartType {
   PROFIT_TREND = 'profit-trend',
-  BB100_TREND = 'bb100-trend'
+  BB100_TREND = 'bb100-trend',
+  STREET_WINLOSS_BAR = 'street-winloss-bar'
 }
 
 export enum HandSection {

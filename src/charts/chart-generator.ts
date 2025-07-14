@@ -1,4 +1,5 @@
 import { Chart, ChartConfiguration, registerables } from 'chart.js';
+import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { createCanvas } from 'canvas';
 import path from 'path';
 import { 
@@ -15,7 +16,7 @@ import { CHARTS, CHART_COLORS } from '../constants';
 import { formatTimestamp, ensureDirectoryExists } from '../utils';
 
 // Register Chart.js components
-Chart.register(...registerables);
+Chart.register(...registerables, ChartDataLabels);
 
 /**
  * Chart generator class responsible for creating visual charts from poker data
@@ -266,6 +267,31 @@ export class ChartGenerator {
                 size: 12
               }
             }
+          },
+          datalabels: {
+            display: true,
+            anchor: 'end' as const,
+            align: 'top' as const,
+            color: '#000000',
+            font: {
+              size: 11,
+              weight: 'bold'
+            },
+            formatter: (value: number) => {
+              // Format the value with appropriate decimal places and sign
+              const formattedValue = Math.abs(value) < 0.01 ? value.toFixed(3) : value.toFixed(2);
+              return value >= 0 ? `+${formattedValue}` : formattedValue;
+            },
+            backgroundColor: 'rgba(255, 255, 255, 0.8)',
+            borderColor: 'rgba(0, 0, 0, 0.2)',
+            borderWidth: 1,
+            borderRadius: 4,
+            padding: {
+              top: 2,
+              right: 4,
+              bottom: 2,
+              left: 4
+            }
           }
         }
       }
@@ -381,7 +407,11 @@ export class ChartGenerator {
       },
       plugins: {
         title: this.createTitleConfig(config.title),
-        legend: this.createLegendConfig()
+        legend: this.createLegendConfig(),
+        // Explicitly disable datalabels for line charts to maintain readability
+        datalabels: {
+          display: false
+        }
       },
       elements: {
         line: {

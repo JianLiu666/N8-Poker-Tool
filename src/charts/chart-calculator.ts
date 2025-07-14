@@ -13,7 +13,7 @@ export class ChartCalculator {
   /**
    * 計算平滑的 profit 數據
    * @param hands 手牌數據
-   * @param interval 取樣間隔（每多少手記錄一個節點）
+   * @param interval 取樣間隔（每多少手計算一個平均值節點）
    */
   private calculateSmoothProfitData(hands: PokerHand[], interval: number = 1): ProfitChartData {
     const allHandsWithRake: ChartDataPoint[] = [];
@@ -26,6 +26,16 @@ export class ChartCalculator {
     let cumulativeShowdown = 0;
     let cumulativeNoShowdown = 0;
 
+    // 用於在區間內累積計算平均值
+    let intervalSum = {
+      allWithRake: 0,
+      allActual: 0,
+      showdown: 0,
+      noShowdown: 0
+    };
+    let intervalCount = 0;
+    let intervalStart = 0;
+
     hands.forEach((hand, index) => {
       const handNumber = index + 1;
       const profit = hand.hero_profit;
@@ -34,55 +44,71 @@ export class ChartCalculator {
       // rake 只有在 hero_profit > 0 (贏錢) 時才存在
       const adjustedRake = profit > 0 ? rake : 0;
       
-      // 累積總體 profit (含rake) - 只有贏錢時才加上rake
+      // 累積總體 profit
       cumulativeAllWithRake += profit + adjustedRake;
-      
-      // 累積實際 profit (不含rake)
       cumulativeAllActual += profit;
 
-      // 根據是否攤牌分別累積，但每條線都要有相同的長度
+      // 根據是否攤牌分別累積
       const isShowdown = hand.hero_hand_result === HandResult.SHOWDOWN_WIN || 
                         hand.hero_hand_result === HandResult.SHOWDOWN_LOSS;
 
       if (isShowdown) {
-        // 這手是 showdown，showdown 線增加 profit，no_showdown 線增加 0
         cumulativeShowdown += profit;
-        // cumulativeNoShowdown += 0; // 不變
       } else {
-        // 這手是 no_showdown，no_showdown 線增加 profit，showdown 線增加 0
         cumulativeNoShowdown += profit;
-        // cumulativeShowdown += 0; // 不變
       }
 
-      // 只在達到取樣間隔或最後一手時記錄數據點
-      const isLastHand = index === hands.length - 1;
-      const shouldRecord = handNumber % interval === 0 || isLastHand;
+      // 在區間內累積數據
+      intervalSum.allWithRake += cumulativeAllWithRake;
+      intervalSum.allActual += cumulativeAllActual;
+      intervalSum.showdown += cumulativeShowdown;
+      intervalSum.noShowdown += cumulativeNoShowdown;
+      intervalCount++;
 
-      if (shouldRecord) {
+      // 檢查是否到達區間結束或最後一手
+      const isLastHand = index === hands.length - 1;
+      const isIntervalEnd = handNumber % interval === 0;
+
+      if (isIntervalEnd || isLastHand) {
+        // 計算區間內的平均值
+        const avgAllWithRake = intervalSum.allWithRake / intervalCount;
+        const avgAllActual = intervalSum.allActual / intervalCount;
+        const avgShowdown = intervalSum.showdown / intervalCount;
+        const avgNoShowdown = intervalSum.noShowdown / intervalCount;
+
         allHandsWithRake.push({
           handNumber,
-          value: parseFloat(cumulativeAllWithRake.toFixed(2)),
+          value: parseFloat(avgAllWithRake.toFixed(2)),
           timestamp: hand.hand_start_time
         });
 
         allHandsActual.push({
           handNumber,
-          value: parseFloat(cumulativeAllActual.toFixed(2)),
+          value: parseFloat(avgAllActual.toFixed(2)),
           timestamp: hand.hand_start_time
         });
 
-        // 兩條線都要有相同的資料點數量
         showdownOnly.push({
           handNumber,
-          value: parseFloat(cumulativeShowdown.toFixed(2)),
+          value: parseFloat(avgShowdown.toFixed(2)),
           timestamp: hand.hand_start_time
         });
 
         noShowdownOnly.push({
           handNumber,
-          value: parseFloat(cumulativeNoShowdown.toFixed(2)),
+          value: parseFloat(avgNoShowdown.toFixed(2)),
           timestamp: hand.hand_start_time
         });
+
+        // 重置區間累積器
+        intervalSum = {
+          allWithRake: 0,
+          allActual: 0,
+          showdown: 0,
+          noShowdown: 0
+        };
+        intervalCount = 0;
+        intervalStart = handNumber;
       }
     });
 
@@ -105,7 +131,7 @@ export class ChartCalculator {
   /**
    * 計算平滑的 BB/100 數據
    * @param hands 手牌數據
-   * @param interval 取樣間隔（每多少手記錄一個節點）
+   * @param interval 取樣間隔（每多少手計算一個平均值節點）
    */
   private calculateSmoothBB100Data(hands: PokerHand[], interval: number = 100): BB100ChartData {
     const allHandsWithRakeBB100: ChartDataPoint[] = [];
@@ -118,6 +144,15 @@ export class ChartCalculator {
     let cumulativeShowdown = 0;
     let cumulativeNoShowdown = 0;
     let cumulativeBigBlinds = 0;
+
+    // 用於在區間內累積計算平均值
+    let intervalSum = {
+      bb100AllWithRake: 0,
+      bb100AllActual: 0,
+      bb100Showdown: 0,
+      bb100NoShowdown: 0
+    };
+    let intervalCount = 0;
 
     hands.forEach((hand, index) => {
       const handNumber = index + 1;
@@ -145,48 +180,70 @@ export class ChartCalculator {
         cumulativeNoShowdown += profit;
       }
 
-      // 只在達到取樣間隔或最後一手時記錄數據點
-      const isLastHand = index === hands.length - 1;
-      const shouldRecord = handNumber % interval === 0 || isLastHand;
+      // 計算當前的 BB/100 值
+      const bb100AllWithRake = cumulativeBigBlinds > 0 
+        ? (cumulativeAllWithRake / cumulativeBigBlinds) * 100 
+        : 0;
+      const bb100AllActual = cumulativeBigBlinds > 0 
+        ? (cumulativeAllActual / cumulativeBigBlinds) * 100 
+        : 0;
+      const bb100Showdown = cumulativeBigBlinds > 0 
+        ? (cumulativeShowdown / cumulativeBigBlinds) * 100 
+        : 0;
+      const bb100NoShowdown = cumulativeBigBlinds > 0 
+        ? (cumulativeNoShowdown / cumulativeBigBlinds) * 100 
+        : 0;
 
-      if (shouldRecord) {
-        // 計算 BB/100 (防止除以零)
-        const bb100AllWithRake = cumulativeBigBlinds > 0 
-          ? (cumulativeAllWithRake / cumulativeBigBlinds) * 100 
-          : 0;
-        const bb100AllActual = cumulativeBigBlinds > 0 
-          ? (cumulativeAllActual / cumulativeBigBlinds) * 100 
-          : 0;
-        const bb100Showdown = cumulativeBigBlinds > 0 
-          ? (cumulativeShowdown / cumulativeBigBlinds) * 100 
-          : 0;
-        const bb100NoShowdown = cumulativeBigBlinds > 0 
-          ? (cumulativeNoShowdown / cumulativeBigBlinds) * 100 
-          : 0;
+      // 在區間內累積 BB/100 數據
+      intervalSum.bb100AllWithRake += bb100AllWithRake;
+      intervalSum.bb100AllActual += bb100AllActual;
+      intervalSum.bb100Showdown += bb100Showdown;
+      intervalSum.bb100NoShowdown += bb100NoShowdown;
+      intervalCount++;
+
+      // 檢查是否到達區間結束或最後一手
+      const isLastHand = index === hands.length - 1;
+      const isIntervalEnd = handNumber % interval === 0;
+
+      if (isIntervalEnd || isLastHand) {
+        // 計算區間內的平均 BB/100 值
+        const avgBB100AllWithRake = intervalSum.bb100AllWithRake / intervalCount;
+        const avgBB100AllActual = intervalSum.bb100AllActual / intervalCount;
+        const avgBB100Showdown = intervalSum.bb100Showdown / intervalCount;
+        const avgBB100NoShowdown = intervalSum.bb100NoShowdown / intervalCount;
 
         allHandsWithRakeBB100.push({
           handNumber,
-          value: parseFloat(bb100AllWithRake.toFixed(2)),
+          value: parseFloat(avgBB100AllWithRake.toFixed(2)),
           timestamp: hand.hand_start_time
         });
 
         allHandsActualBB100.push({
           handNumber,
-          value: parseFloat(bb100AllActual.toFixed(2)),
+          value: parseFloat(avgBB100AllActual.toFixed(2)),
           timestamp: hand.hand_start_time
         });
 
         showdownOnlyBB100.push({
           handNumber,
-          value: parseFloat(bb100Showdown.toFixed(2)),
+          value: parseFloat(avgBB100Showdown.toFixed(2)),
           timestamp: hand.hand_start_time
         });
 
         noShowdownOnlyBB100.push({
           handNumber,
-          value: parseFloat(bb100NoShowdown.toFixed(2)),
+          value: parseFloat(avgBB100NoShowdown.toFixed(2)),
           timestamp: hand.hand_start_time
         });
+
+        // 重置區間累積器
+        intervalSum = {
+          bb100AllWithRake: 0,
+          bb100AllActual: 0,
+          bb100Showdown: 0,
+          bb100NoShowdown: 0
+        };
+        intervalCount = 0;
       }
     });
 

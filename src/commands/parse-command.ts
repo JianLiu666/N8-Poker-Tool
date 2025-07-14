@@ -1,46 +1,39 @@
-import { SqliteManager } from '../database/sqlite-manager';
-import { PokerHand, GameType, HandResult, FinalStage, PokerPosition } from '../database/sqlite-manager';
 import path from 'path';
 import fs from 'fs-extra';
-
-export interface ParseCommandOptions {
-  inputDir: string;
-  dbPath?: string;
-}
-
-interface ParsedHand {
-  handId: string;
-  timestamp: string;
-  tableName: string;
-  gameType: string;
-  smallBlind: number;
-  bigBlind: number;
-  heroPosition: string;
-  heroHoleCards: string;
-  flopCards: string;
-  turnCard: string;
-  riverCard: string;
-  heroStartingChips: number;
-  heroEndingChips: number;
-  potAmount: number;
-  jackpotAmount: number;
-  heroProfit: number;
-  heroRake: number;
-  finalStage: string;
-  handResult: string;
-  heroActions: {
-    preflop: string[];
-    flop: string[];
-    turn: string[];
-    river: string[];
-  };
-  heroInvestments: {
-    preflop: number;
-    flop: number;
-    turn: number;
-    river: number;
-  };
-}
+import { SqliteManager } from '../database/sqlite-manager';
+import { 
+  ParseCommandOptions, 
+  ParsedHand, 
+  PartialParsedHand,
+  ParseHandResult,
+  FileParseResult,
+  HandSectionType,
+  DatabaseInsertHand,
+  GameType, 
+  HandResult, 
+  FinalStage, 
+  PokerPosition 
+} from '../types';
+import { 
+  DATABASE, 
+  FILE_PATTERNS, 
+  PATTERNS, 
+  HAND_SECTIONS, 
+  ACTION_CODES, 
+  LOG_EMOJIS 
+} from '../constants';
+import { 
+  roundToDecimals, 
+  safeParseFloat, 
+  safeParseInt,
+  isEmptyLine,
+  extractBracketContent,
+  parseCards,
+  calculateRelativePosition,
+  createError,
+  isValidHandId,
+  isUniqueConstraintError
+} from '../utils';
 
 export class ParseCommand {
   private sqliteManager: SqliteManager;
@@ -54,47 +47,42 @@ export class ParseCommand {
 
   async execute(): Promise<void> {
     try {
-      console.log('🚀 Starting parse command...');
+      console.log(`${LOG_EMOJIS.START} Starting parse command...`);
       
-      // 連接資料庫
-      await this.sqliteManager.connect();
-      await this.sqliteManager.initializeTables();
-      
-      // 測試資料庫連線
-      const isConnected = await this.sqliteManager.testConnection();
-      if (!isConnected) {
-        throw new Error('Database connection test failed');
-      }
-
-      // 解析手牌紀錄檔案
+      await this.initializeDatabase();
       const handLogFiles = await this.getHandLogFiles();
       console.log(`Found ${handLogFiles.length} hand log files to parse`);
 
-      let totalHandsParsed = 0;
-      let totalProfit = 0;
+      const { totalHandsParsed, totalProfit } = await this.parseAllFiles(handLogFiles);
 
-      for (const filePath of handLogFiles) {
-        console.log(`📄 Parsing file: ${path.basename(filePath)}`);
-        const { handsParsed, profit } = await this.parseHandLogFile(filePath);
-        totalHandsParsed += handsParsed;
-        totalProfit += profit;
-        console.log(`✅ Parsed ${handsParsed} hands from ${path.basename(filePath)}, profit: ${profit.toFixed(2)}`);
-      }
-
-      console.log(`🎯 Total hands parsed: ${totalHandsParsed}`);
-      console.log(`💰 Total profit: ${totalProfit.toFixed(2)}`);
-
-      // 斷開資料庫連線
-      await this.sqliteManager.disconnect();
-      console.log('✅ Parse command completed successfully!');
+      console.log(`${LOG_EMOJIS.TARGET} Total hands parsed: ${totalHandsParsed}`);
+      console.log(`${LOG_EMOJIS.MONEY} Total profit: ${totalProfit.toFixed(2)}`);
+      console.log(`${LOG_EMOJIS.SUCCESS} Parse command completed successfully!`);
 
     } catch (error) {
-      console.error('❌ Parse command failed:', error);
-      await this.sqliteManager.disconnect();
+      console.error(`${LOG_EMOJIS.ERROR} Parse command failed:`, error);
       throw error;
+    } finally {
+      await this.sqliteManager.disconnect();
     }
   }
 
+  /**
+   * Initialize database connection and tables
+   */
+  private async initializeDatabase(): Promise<void> {
+    await this.sqliteManager.connect();
+    await this.sqliteManager.initializeTables();
+    
+    const isConnected = await this.sqliteManager.testConnection();
+    if (!isConnected) {
+      throw new Error('Database connection test failed');
+    }
+  }
+
+  /**
+   * Get all hand log files from input directory
+   */
   private async getHandLogFiles(): Promise<string[]> {
     const inputDir = path.resolve(this.options.inputDir);
     
@@ -104,17 +92,38 @@ export class ParseCommand {
 
     const files = await fs.readdir(inputDir);
     const handLogFiles = files
-      .filter(file => file.endsWith('.txt'))
+      .filter(file => file.endsWith(FILE_PATTERNS.LOG_FILE_EXTENSION))
       .map(file => path.join(inputDir, file));
 
     if (handLogFiles.length === 0) {
-      throw new Error(`No .txt files found in ${inputDir}`);
+      throw new Error(`No ${FILE_PATTERNS.LOG_FILE_EXTENSION} files found in ${inputDir}`);
     }
 
     return handLogFiles;
   }
 
-  private async parseHandLogFile(filePath: string): Promise<{ handsParsed: number, profit: number }> {
+  /**
+   * Parse all hand log files
+   */
+  private async parseAllFiles(filePaths: string[]): Promise<{ totalHandsParsed: number; totalProfit: number }> {
+    let totalHandsParsed = 0;
+    let totalProfit = 0;
+
+    for (const filePath of filePaths) {
+      console.log(`${LOG_EMOJIS.FILE} Parsing file: ${path.basename(filePath)}`);
+      const { handsParsed, profit } = await this.parseHandLogFile(filePath);
+      totalHandsParsed += handsParsed;
+      totalProfit += profit;
+      console.log(`${LOG_EMOJIS.SUCCESS} Parsed ${handsParsed} hands from ${path.basename(filePath)}, profit: ${profit.toFixed(2)}`);
+    }
+
+    return { totalHandsParsed, totalProfit };
+  }
+
+  /**
+   * Parse a single hand log file
+   */
+  private async parseHandLogFile(filePath: string): Promise<FileParseResult> {
     const content = await fs.readFile(filePath, 'utf-8');
     const lines = content.split('\n').map(line => line.trim());
     
@@ -124,17 +133,16 @@ export class ParseCommand {
     
     while (i < lines.length) {
       if (lines[i].startsWith('Poker Hand #')) {
-        const hand = this.parseCompleteHand(lines, i);
-        if (hand) {
-          // 檢查這個手牌是否已經存在於資料庫中
-          const existingHand = await this.sqliteManager.getPokerHandById(hand.hand.handId);
+        const result = this.parseCompleteHand(lines, i);
+        if (result) {
+          const existingHand = await this.sqliteManager.getPokerHandById(result.hand.handId);
           if (existingHand) {
-            console.log(`⏭️  Skipping already parsed hand: ${hand.hand.handId}`);
+            console.log(`${LOG_EMOJIS.SKIP} Skipping already parsed hand: ${result.hand.handId}`);
             skippedHands++;
           } else {
-            hands.push(hand.hand);
+            hands.push(result.hand);
           }
-          i = hand.nextIndex;
+          i = result.nextIndex;
         } else {
           i++;
         }
@@ -143,7 +151,7 @@ export class ParseCommand {
       }
     }
 
-    // 儲存到資料庫
+    // Save hands to database
     let totalProfit = 0;
     for (const hand of hands) {
       await this.saveHandToDatabase(hand);
@@ -151,23 +159,25 @@ export class ParseCommand {
     }
 
     if (skippedHands > 0) {
-      console.log(`⏭️  Skipped ${skippedHands} already parsed hands from ${path.basename(filePath)}`);
+      console.log(`${LOG_EMOJIS.SKIP} Skipped ${skippedHands} already parsed hands from ${path.basename(filePath)}`);
     }
 
     return { handsParsed: hands.length, profit: totalProfit };
   }
 
-  private parseCompleteHand(lines: string[], startIndex: number): { hand: ParsedHand, nextIndex: number } | null {
+  /**
+   * Parse a complete hand from the log lines
+   */
+  private parseCompleteHand(lines: string[], startIndex: number): ParseHandResult | null {
     let i = startIndex;
     
-    // 解析手牌頭部
     const handHeader = this.parseHandHeader(lines[i]);
     if (!handHeader) return null;
     
     i++;
     
-    // 初始化手牌資料
-    const hand: Partial<ParsedHand> = {
+    // Initialize hand data with default values
+    const hand: PartialParsedHand = {
       ...handHeader,
       heroActions: { preflop: [], flop: [], turn: [], river: [] },
       heroInvestments: { preflop: 0, flop: 0, turn: 0, river: 0 },
@@ -181,102 +191,45 @@ export class ParseCommand {
 
     let heroSeatNumber: number | null = null;
     let buttonSeatNumber: number | null = null;
-    let currentSection: 'preflop' | 'flop' | 'turn' | 'river' = 'preflop';
+    let currentSection: HandSectionType = 'preflop';
 
-    // 解析手牌內容
+    // Parse hand content
     while (i < lines.length && !lines[i].startsWith('Poker Hand #')) {
       const line = lines[i];
       
-      if (line.trim() === '') {
+      if (isEmptyLine(line)) {
         i++;
         continue;
       }
 
-      // 解析桌子資訊和 button 位置
+      // Parse table info and button position
       if (line.startsWith('Table \'')) {
-        const tableMatch = line.match(/Table '([^']+)'/);
-        if (tableMatch) {
-          hand.tableName = tableMatch[1];
-        }
-        
-        const buttonMatch = line.match(/Seat #(\d+) is the button/);
-        if (buttonMatch) {
-          buttonSeatNumber = parseInt(buttonMatch[1]);
-        }
+        this.parseTableInfo(hand, line);
+        buttonSeatNumber = this.parseButtonPosition(line);
       }
-
-      // 解析座位資訊
+      // Parse seat information
       else if (line.startsWith('Seat ') && line.includes('Hero')) {
-        const seatMatch = line.match(/Seat (\d+): Hero \(\$([0-9.]+) in chips\)/);
-        if (seatMatch) {
-          heroSeatNumber = parseInt(seatMatch[1]);
-          hand.heroStartingChips = parseFloat(seatMatch[2]);
-        }
+        heroSeatNumber = this.parseHeroSeat(hand, line);
       }
-
-      // 解析底牌
+      // Parse hole cards
       else if (line.startsWith('Dealt to Hero [')) {
-        const cardsMatch = line.match(/Dealt to Hero \[([^\]]+)\]/);
-        if (cardsMatch) {
-          hand.heroHoleCards = cardsMatch[1];
-        }
+        this.parseHoleCards(hand, line);
       }
-
-             // 解析階段轉換和公共牌
-       else if (line.startsWith('*** FLOP ***')) {
-         currentSection = 'flop';
-         const flopMatch = line.match(/\[([^\]]+)\]/);
-         if (flopMatch) {
-           hand.flopCards = flopMatch[1];
-         }
-       }
-       else if (line.startsWith('*** TURN ***')) {
-         currentSection = 'turn';
-         // TURN 行格式: *** TURN *** [8s 5s 4h] [9c] 或 *** TURN *** [8s 5s 4h 9c]
-         const turnMatches = line.match(/\[([^\]]+)\]/g);
-         if (turnMatches) {
-           if (turnMatches.length >= 2) {
-             // 有兩個方括號，第二個是 turn 牌
-             hand.turnCard = turnMatches[1].replace(/[\[\]]/g, '');
-           } else {
-             // 只有一個方括號，包含所有牌，取第 4 張
-             const cards = turnMatches[0].replace(/[\[\]]/g, '').split(' ');
-             hand.turnCard = cards[3];
-           }
-         }
-       }
-       else if (line.startsWith('*** RIVER ***')) {
-         currentSection = 'river';
-         // RIVER 行格式: *** RIVER *** [8s 5s 4h 9c] [9h] 或 *** RIVER *** [8s 5s 4h 9c 9h]
-         const riverMatches = line.match(/\[([^\]]+)\]/g);
-         if (riverMatches) {
-           if (riverMatches.length >= 2) {
-             // 有兩個方括號，第二個是 river 牌
-             hand.riverCard = riverMatches[1].replace(/[\[\]]/g, '');
-           } else {
-             // 只有一個方括號，包含所有牌，取第 5 張
-             const cards = riverMatches[0].replace(/[\[\]]/g, '').split(' ');
-             hand.riverCard = cards[4];
-           }
-         }
-       }
-
-      // 解析 Hero 的動作
+      // Parse street transitions and community cards
+      else if (this.isStreetTransition(line)) {
+        const result = this.parseStreetTransition(hand, line);
+        if (result) currentSection = result;
+      }
+      // Parse hero actions
       else if (line.includes('Hero:')) {
         this.parseHeroAction(hand, line, currentSection);
       }
-
-      // 解析 Uncalled bet returned
+      // Parse uncalled bet returns
       else if (line.includes('Uncalled bet') && line.includes('returned to Hero')) {
-        const uncalledMatch = line.match(/Uncalled bet \(\$([0-9.]+)\) returned to Hero/);
-        if (uncalledMatch) {
-          const uncalledAmount = parseFloat(uncalledMatch[1]);
-          hand.heroInvestments![currentSection] = Math.round((hand.heroInvestments![currentSection] - uncalledAmount) * 100) / 100;
-        }
+        this.parseUncalledBet(hand, line, currentSection);
       }
-
-      // 解析 SUMMARY 段落
-      else if (line.startsWith('*** SUMMARY ***')) {
+      // Parse summary section
+      else if (line.startsWith(HAND_SECTIONS.SUMMARY)) {
         i = this.parseSummarySection(lines, i, hand, heroSeatNumber);
         break;
       }
@@ -284,125 +237,223 @@ export class ParseCommand {
       i++;
     }
 
-    // 完成手牌解析
     const finalizedHand = this.finalizeHand(hand, heroSeatNumber, buttonSeatNumber);
     return { hand: finalizedHand, nextIndex: i };
   }
 
-  private parseHandHeader(line: string): Partial<ParsedHand> | null {
-    const match = line.match(/Poker Hand #([^:]+): Hold'em No Limit \(\$([0-9.]+)\/\$([0-9.]+)\) - (.+)/);
+  /**
+   * Parse hand header information
+   */
+  private parseHandHeader(line: string): PartialParsedHand | null {
+    const match = line.match(PATTERNS.HAND_HEADER);
     if (!match) return null;
 
     const [, handId, smallBlind, bigBlind, timestamp] = match;
     
     return {
       handId,
-      smallBlind: parseFloat(smallBlind),
-      bigBlind: parseFloat(bigBlind),
+      smallBlind: safeParseFloat(smallBlind),
+      bigBlind: safeParseFloat(bigBlind),
       timestamp,
       gameType: GameType.RUSH_AND_CASH,
       heroProfit: 0
     };
   }
 
-  private parseHeroAction(hand: Partial<ParsedHand>, line: string, section: 'preflop' | 'flop' | 'turn' | 'river'): void {
-    if (!hand.heroActions || !hand.heroInvestments) return;
-
-    // 修正浮點數精度問題的輔助函數
-    const roundToTwoDecimals = (num: number): number => Math.round(num * 100) / 100;
-
-    // 解析盲注
-    if (line.includes('posts small blind')) {
-      const blindMatch = line.match(/posts small blind \$([0-9.]+)/);
-      if (blindMatch) {
-        hand.heroInvestments.preflop = roundToTwoDecimals(parseFloat(blindMatch[1]));
-      }
-      return;
-    }
-    
-    if (line.includes('posts big blind')) {
-      const blindMatch = line.match(/posts big blind \$([0-9.]+)/);
-      if (blindMatch) {
-        hand.heroInvestments.preflop = roundToTwoDecimals(parseFloat(blindMatch[1]));
-      }
-      return;
-    }
-
-    // 解析動作
-    if (line.includes('folds')) {
-      hand.heroActions[section].push('F');
-    } else if (line.includes('checks')) {
-      hand.heroActions[section].push('X');
-    } else if (line.includes('calls')) {
-      hand.heroActions[section].push('C');
-      const callMatch = line.match(/calls \$([0-9.]+)/);
-      if (callMatch) {
-        hand.heroInvestments[section] = roundToTwoDecimals(
-          hand.heroInvestments[section] + parseFloat(callMatch[1])
-        );
-      }
-    } else if (line.includes('bets') && !line.includes('raises')) {
-      hand.heroActions[section].push('B');
-      const betMatch = line.match(/bets \$([0-9.]+)/);
-      if (betMatch) {
-        hand.heroInvestments[section] = roundToTwoDecimals(
-          hand.heroInvestments[section] + parseFloat(betMatch[1])
-        );
-      }
-    } else if (line.includes('raises')) {
-      hand.heroActions[section].push('R');
-      const raiseMatch = line.match(/raises \$[0-9.]+ to \$([0-9.]+)/);
-      if (raiseMatch) {
-        hand.heroInvestments[section] = roundToTwoDecimals(parseFloat(raiseMatch[1]));
-      }
+  /**
+   * Parse table information
+   */
+  private parseTableInfo(hand: PartialParsedHand, line: string): void {
+    const tableMatch = line.match(PATTERNS.TABLE_INFO);
+    if (tableMatch) {
+      hand.tableName = tableMatch[1];
     }
   }
 
-  private parseSummarySection(lines: string[], startIndex: number, hand: Partial<ParsedHand>, heroSeatNumber: number | null): number {
+  /**
+   * Parse button position
+   */
+  private parseButtonPosition(line: string): number | null {
+    const buttonMatch = line.match(PATTERNS.BUTTON_POSITION);
+    return buttonMatch ? safeParseInt(buttonMatch[1]) : null;
+  }
+
+  /**
+   * Parse hero seat information
+   */
+  private parseHeroSeat(hand: PartialParsedHand, line: string): number | null {
+    const seatMatch = line.match(PATTERNS.HERO_SEAT);
+    if (seatMatch) {
+      const seatNumber = safeParseInt(seatMatch[1]);
+      hand.heroStartingChips = safeParseFloat(seatMatch[2]);
+      return seatNumber;
+    }
+    return null;
+  }
+
+  /**
+   * Parse hole cards
+   */
+  private parseHoleCards(hand: PartialParsedHand, line: string): void {
+    const cardsMatch = line.match(PATTERNS.HOLE_CARDS);
+    if (cardsMatch) {
+      hand.heroHoleCards = cardsMatch[1];
+    }
+  }
+
+  /**
+   * Check if line represents a street transition
+   */
+  private isStreetTransition(line: string): boolean {
+    return line.startsWith(HAND_SECTIONS.FLOP) || 
+           line.startsWith(HAND_SECTIONS.TURN) || 
+           line.startsWith(HAND_SECTIONS.RIVER);
+  }
+
+  /**
+   * Parse street transition and community cards
+   */
+  private parseStreetTransition(hand: PartialParsedHand, line: string): HandSectionType | null {
+    if (line.startsWith(HAND_SECTIONS.FLOP)) {
+      const flopCards = extractBracketContent(line);
+      if (flopCards.length > 0) {
+        hand.flopCards = flopCards[0];
+      }
+      return 'flop';
+    }
+    
+    if (line.startsWith(HAND_SECTIONS.TURN)) {
+      const turnCards = extractBracketContent(line);
+      if (turnCards.length >= 2) {
+        hand.turnCard = turnCards[1];
+      } else if (turnCards.length === 1) {
+        const cards = parseCards(turnCards[0]);
+        hand.turnCard = cards[3] || '';
+      }
+      return 'turn';
+    }
+    
+    if (line.startsWith(HAND_SECTIONS.RIVER)) {
+      const riverCards = extractBracketContent(line);
+      if (riverCards.length >= 2) {
+        hand.riverCard = riverCards[1];
+      } else if (riverCards.length === 1) {
+        const cards = parseCards(riverCards[0]);
+        hand.riverCard = cards[4] || '';
+      }
+      return 'river';
+    }
+
+    return null;
+  }
+
+  /**
+   * Parse hero action and investment
+   */
+  private parseHeroAction(hand: PartialParsedHand, line: string, section: HandSectionType): void {
+    if (!hand.heroActions || !hand.heroInvestments) return;
+
+    // Handle blinds
+    if (this.parseBlindAction(hand, line)) return;
+
+    // Parse regular actions
+    if (line.includes('folds')) {
+      hand.heroActions[section].push(ACTION_CODES.FOLD);
+    } else if (line.includes('checks')) {
+      hand.heroActions[section].push(ACTION_CODES.CHECK);
+    } else if (line.includes('calls')) {
+      hand.heroActions[section].push(ACTION_CODES.CALL);
+      this.updateInvestment(hand, line, section, PATTERNS.AMOUNT_PATTERNS.CALLS);
+    } else if (line.includes('bets') && !line.includes('raises')) {
+      hand.heroActions[section].push(ACTION_CODES.BET);
+      this.updateInvestment(hand, line, section, PATTERNS.AMOUNT_PATTERNS.BETS);
+    } else if (line.includes('raises')) {
+      hand.heroActions[section].push(ACTION_CODES.RAISE);
+      this.updateRaiseInvestment(hand, line, section);
+    }
+  }
+
+  /**
+   * Parse blind posting actions
+   */
+  private parseBlindAction(hand: PartialParsedHand, line: string): boolean {
+    if (line.includes('posts small blind')) {
+      const blindMatch = line.match(PATTERNS.AMOUNT_PATTERNS.POSTS_SMALL_BLIND);
+      if (blindMatch) {
+        hand.heroInvestments!.preflop = roundToDecimals(safeParseFloat(blindMatch[1]));
+      }
+      return true;
+    }
+    
+    if (line.includes('posts big blind')) {
+      const blindMatch = line.match(PATTERNS.AMOUNT_PATTERNS.POSTS_BIG_BLIND);
+      if (blindMatch) {
+        hand.heroInvestments!.preflop = roundToDecimals(safeParseFloat(blindMatch[1]));
+      }
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Update investment for call/bet actions
+   */
+  private updateInvestment(hand: PartialParsedHand, line: string, section: HandSectionType, pattern: RegExp): void {
+    const match = line.match(pattern);
+    if (match) {
+      const amount = safeParseFloat(match[1]);
+      hand.heroInvestments![section] = roundToDecimals(
+        hand.heroInvestments![section] + amount
+      );
+    }
+  }
+
+  /**
+   * Update investment for raise actions
+   */
+  private updateRaiseInvestment(hand: PartialParsedHand, line: string, section: HandSectionType): void {
+    const raiseMatch = line.match(PATTERNS.AMOUNT_PATTERNS.RAISES);
+    if (raiseMatch) {
+      hand.heroInvestments![section] = roundToDecimals(safeParseFloat(raiseMatch[1]));
+    }
+  }
+
+  /**
+   * Parse uncalled bet returned to hero
+   */
+  private parseUncalledBet(hand: PartialParsedHand, line: string, section: HandSectionType): void {
+    const uncalledMatch = line.match(PATTERNS.AMOUNT_PATTERNS.UNCALLED_BET);
+    if (uncalledMatch) {
+      const uncalledAmount = safeParseFloat(uncalledMatch[1]);
+      hand.heroInvestments![section] = roundToDecimals(
+        hand.heroInvestments![section] - uncalledAmount
+      );
+    }
+  }
+
+  /**
+   * Parse the summary section of the hand
+   */
+  private parseSummarySection(lines: string[], startIndex: number, hand: PartialParsedHand, heroSeatNumber: number | null): number {
     let i = startIndex + 1;
     
     while (i < lines.length && !lines[i].startsWith('Poker Hand #')) {
       const line = lines[i].trim();
       
-      if (line === '') {
+      if (isEmptyLine(line)) {
         i++;
         continue;
       }
 
-      // 解析 Total pot、Rake 和 Jackpot
+      // Parse pot, rake, and jackpot
       if (line.startsWith('Total pot')) {
-        const potMatch = line.match(/Total pot \$([0-9.]+)/);
-        if (potMatch) {
-          hand.potAmount = parseFloat(potMatch[1]);
-        }
-        const rakeMatch = line.match(/Rake \$([0-9.]+)/);
-        if (rakeMatch) {
-          hand.heroRake = parseFloat(rakeMatch[1]);
-        }
-        const jackpotMatch = line.match(/Jackpot \$([0-9.]+)/);
-        if (jackpotMatch) {
-          hand.jackpotAmount = parseFloat(jackpotMatch[1]);
-        }
+        this.parsePotInformation(hand, line);
       }
 
-      // 解析 Hero 的最終結果
+      // Parse hero's final result
       if (line.includes(`Seat ${heroSeatNumber}: Hero`) && heroSeatNumber) {
-        // 檢查是否贏錢
-        const wonMatch = line.match(/won \(\$([0-9.]+)\)/);
-        const collectedMatch = line.match(/collected \(\$([0-9.]+)\)/);
-        
-        if (wonMatch) {
-          hand.heroProfit = parseFloat(wonMatch[1]);
-        } else if (collectedMatch) {
-          hand.heroProfit = parseFloat(collectedMatch[1]);
-        }
-        
-        // 檢查是否有顯示牌
-        if (line.includes('showed')) {
-          hand.handResult = hand.heroProfit! > 0 ? HandResult.SHOWDOWN_WIN : HandResult.SHOWDOWN_LOSS;
-        } else {
-          hand.handResult = hand.heroProfit! > 0 ? HandResult.NO_SHOWDOWN_WIN : HandResult.NO_SHOWDOWN_LOSS;
-        }
+        this.parseHeroResult(hand, line);
       }
       
       i++;
@@ -411,50 +462,74 @@ export class ParseCommand {
     return i;
   }
 
-  private finalizeHand(hand: Partial<ParsedHand>, heroSeatNumber: number | null, buttonSeatNumber: number | null): ParsedHand {
-    // 修正浮點數精度問題的輔助函數
-    const roundToTwoDecimals = (num: number): number => Math.round(num * 100) / 100;
+  /**
+   * Parse pot, rake, and jackpot information
+   */
+  private parsePotInformation(hand: PartialParsedHand, line: string): void {
+    const potMatch = line.match(PATTERNS.AMOUNT_PATTERNS.TOTAL_POT);
+    if (potMatch) {
+      hand.potAmount = safeParseFloat(potMatch[1]);
+    }
+
+    const rakeMatch = line.match(PATTERNS.AMOUNT_PATTERNS.RAKE);
+    if (rakeMatch) {
+      hand.heroRake = safeParseFloat(rakeMatch[1]);
+    }
+
+    const jackpotMatch = line.match(PATTERNS.AMOUNT_PATTERNS.JACKPOT);
+    if (jackpotMatch) {
+      hand.jackpotAmount = safeParseFloat(jackpotMatch[1]);
+    }
+  }
+
+  /**
+   * Parse hero's final result
+   */
+  private parseHeroResult(hand: PartialParsedHand, line: string): void {
+    const wonMatch = line.match(PATTERNS.AMOUNT_PATTERNS.WON);
+    const collectedMatch = line.match(PATTERNS.AMOUNT_PATTERNS.COLLECTED);
     
-    // 計算總投入（修正浮點數精度）
-    const totalInvestment = roundToTwoDecimals(
+    if (wonMatch) {
+      hand.heroProfit = safeParseFloat(wonMatch[1]);
+    } else if (collectedMatch) {
+      hand.heroProfit = safeParseFloat(collectedMatch[1]);
+    }
+    
+    // Determine hand result based on showdown and profit
+    if (line.includes('showed')) {
+      hand.handResult = (hand.heroProfit || 0) > 0 ? HandResult.SHOWDOWN_WIN : HandResult.SHOWDOWN_LOSS;
+    } else {
+      hand.handResult = (hand.heroProfit || 0) > 0 ? HandResult.NO_SHOWDOWN_WIN : HandResult.NO_SHOWDOWN_LOSS;
+    }
+  }
+
+  /**
+   * Finalize hand data and calculate derived values
+   */
+  private finalizeHand(hand: PartialParsedHand, heroSeatNumber: number | null, buttonSeatNumber: number | null): ParsedHand {
+    // Calculate total investment
+    const totalInvestment = roundToDecimals(
       (hand.heroInvestments?.preflop || 0) + 
       (hand.heroInvestments?.flop || 0) + 
       (hand.heroInvestments?.turn || 0) + 
       (hand.heroInvestments?.river || 0)
     );
     
-    // 重新計算 hero_profit：pot - rake - jackpot - 總投資
-    const potAmount = hand.potAmount || 0;
-    const jackpotAmount = hand.jackpotAmount || 0;
-    const rakeAmount = hand.heroRake || 0;
-    
-    // 如果 Hero 贏了錢，profit = pot - rake - jackpot - 投資
-    // 如果 Hero 沒贏錢，profit = -投資
-    const collectedAmount = hand.heroProfit || 0; // 這是從 SUMMARY 解析出的 Hero 收到的金額
+    // Calculate final profit
+    const collectedAmount = hand.heroProfit || 0;
     let finalProfit: number;
     
     if (collectedAmount > 0) {
-      // Hero 贏錢的情況：實際收益 = 收到的金額 - 總投資
-      finalProfit = roundToTwoDecimals(collectedAmount - totalInvestment);
+      finalProfit = roundToDecimals(collectedAmount - totalInvestment);
     } else {
-      // Hero 沒贏錢的情況：損失 = -總投資
-      finalProfit = roundToTwoDecimals(-totalInvestment);
+      finalProfit = roundToDecimals(-totalInvestment);
     }
     
-    // 確定最終階段
-    let finalStage = FinalStage.PREFLOP;
-    if (hand.riverCard) finalStage = FinalStage.RIVER;
-    else if (hand.turnCard) finalStage = FinalStage.TURN;
-    else if (hand.flopCards) finalStage = FinalStage.FLOP;
-    
-    if (hand.handResult === HandResult.SHOWDOWN_WIN || hand.handResult === HandResult.SHOWDOWN_LOSS) {
-      finalStage = FinalStage.SHOWDOWN;
-    }
+    // Determine final stage
+    const finalStage = this.determineFinalStage(hand);
 
-    // 確定 Hero 位置
-    const heroPosition = (heroSeatNumber && buttonSeatNumber) 
-      ? this.determineHeroPosition(hand, heroSeatNumber, buttonSeatNumber)
-      : PokerPosition.BTN;
+    // Determine hero position
+    const heroPosition = this.determineHeroPosition(heroSeatNumber, buttonSeatNumber);
 
     return {
       handId: hand.handId!,
@@ -470,24 +545,45 @@ export class ParseCommand {
       riverCard: hand.riverCard || '',
       heroStartingChips: hand.heroStartingChips || 0,
       heroEndingChips: (hand.heroStartingChips || 0) + finalProfit,
-      potAmount: roundToTwoDecimals(potAmount),
-      jackpotAmount: roundToTwoDecimals(jackpotAmount),
+      potAmount: roundToDecimals(hand.potAmount || 0),
+      jackpotAmount: roundToDecimals(hand.jackpotAmount || 0),
       heroProfit: finalProfit,
-      heroRake: roundToTwoDecimals(rakeAmount),
+      heroRake: roundToDecimals(hand.heroRake || 0),
       finalStage,
       handResult: hand.handResult || HandResult.NO_SHOWDOWN_LOSS,
       heroActions: hand.heroActions!,
       heroInvestments: {
-        preflop: roundToTwoDecimals(hand.heroInvestments?.preflop || 0),
-        flop: roundToTwoDecimals(hand.heroInvestments?.flop || 0),
-        turn: roundToTwoDecimals(hand.heroInvestments?.turn || 0),
-        river: roundToTwoDecimals(hand.heroInvestments?.river || 0)
+        preflop: roundToDecimals(hand.heroInvestments?.preflop || 0),
+        flop: roundToDecimals(hand.heroInvestments?.flop || 0),
+        turn: roundToDecimals(hand.heroInvestments?.turn || 0),
+        river: roundToDecimals(hand.heroInvestments?.river || 0)
       }
     };
   }
 
-  private determineHeroPosition(hand: Partial<ParsedHand>, heroSeatNumber: number, buttonSeatNumber: number): string {
-    // 6人桌位置對應表
+  /**
+   * Determine the final stage of the hand
+   */
+  private determineFinalStage(hand: PartialParsedHand): FinalStage {
+    if (hand.handResult === HandResult.SHOWDOWN_WIN || hand.handResult === HandResult.SHOWDOWN_LOSS) {
+      return FinalStage.SHOWDOWN;
+    }
+    
+    if (hand.riverCard) return FinalStage.RIVER;
+    if (hand.turnCard) return FinalStage.TURN;
+    if (hand.flopCards) return FinalStage.FLOP;
+    
+    return FinalStage.PREFLOP;
+  }
+
+  /**
+   * Determine hero's position based on seat numbers
+   */
+  private determineHeroPosition(heroSeatNumber: number | null, buttonSeatNumber: number | null): PokerPosition {
+    if (!heroSeatNumber || !buttonSeatNumber) {
+      return PokerPosition.BTN;
+    }
+
     const positions = [
       PokerPosition.BTN,  // Button
       PokerPosition.SB,   // Small Blind  
@@ -497,21 +593,26 @@ export class ParseCommand {
       PokerPosition.CO    // Cutoff
     ];
     
-    // 計算相對位置 (Hero 相對於 Button 的位置)
-    let relativePosition = (heroSeatNumber - buttonSeatNumber + 6) % 6;
-    
-    return positions[relativePosition];
+    const relativePosition = calculateRelativePosition(heroSeatNumber, buttonSeatNumber);
+    return positions[relativePosition] || PokerPosition.BTN;
   }
 
+  /**
+   * Save hand to database with error handling
+   */
   private async saveHandToDatabase(hand: ParsedHand): Promise<void> {
-    // 再次檢查以確保不重複插入（雙重保護）
+    if (!isValidHandId(hand.handId)) {
+      throw createError('Invalid hand ID', hand.handId);
+    }
+
+    // Double-check for duplicates
     const existingHand = await this.sqliteManager.getPokerHandById(hand.handId);
     if (existingHand) {
-      console.log(`⚠️  Hand ${hand.handId} already exists in database, skipping...`);
+      console.log(`${LOG_EMOJIS.WARNING} Hand ${hand.handId} already exists in database, skipping...`);
       return;
     }
 
-    const dbHand: Omit<PokerHand, 'id' | 'created_at'> = {
+    const dbHand: DatabaseInsertHand = {
       hand_id: hand.handId,
       hand_start_time: hand.timestamp,
       game_type: hand.gameType,
@@ -540,11 +641,10 @@ export class ParseCommand {
 
     try {
       await this.sqliteManager.insertPokerHand(dbHand);
-      console.log(`✅ Successfully saved hand: ${hand.handId}`);
+      console.log(`${LOG_EMOJIS.SUCCESS} Successfully saved hand: ${hand.handId}`);
     } catch (error) {
-      // 如果是 UNIQUE constraint 錯誤，則忽略（表示已存在）
-      if (error instanceof Error && error.message.includes('UNIQUE constraint failed')) {
-        console.log(`⚠️  Hand ${hand.handId} already exists (UNIQUE constraint), skipping...`);
+      if (error instanceof Error && isUniqueConstraintError(error)) {
+        console.log(`${LOG_EMOJIS.WARNING} Hand ${hand.handId} already exists (UNIQUE constraint), skipping...`);
       } else {
         throw error;
       }

@@ -24,7 +24,8 @@ export interface ChartDataPoint {
 }
 
 export interface ChartData {
-  allHands: ChartDataPoint[];
+  allHandsWithRake: ChartDataPoint[];  // hero_profit + hero_rake (如果沒有抽水)
+  allHandsActual: ChartDataPoint[];    // hero_profit (真正金流)
   showdownOnly: ChartDataPoint[];
   noShowdownOnly: ChartDataPoint[];
 }
@@ -84,25 +85,39 @@ export class ChartCommand {
   }
 
   private calculateCumulativeData(hands: PokerHand[]): ChartData {
-    const allHands: ChartDataPoint[] = [];
+    const allHandsWithRake: ChartDataPoint[] = [];
+    const allHandsActual: ChartDataPoint[] = [];
     const showdownOnly: ChartDataPoint[] = [];
     const noShowdownOnly: ChartDataPoint[] = [];
 
-    let cumulativeAll = 0;
+    let cumulativeAllWithRake = 0;
+    let cumulativeAllActual = 0;
     let cumulativeShowdown = 0;
     let cumulativeNoShowdown = 0;
 
-    hands.forEach((hand, index) => {
-      const handNumber = index + 1;
-      const profit = hand.hero_profit;
-      
-      // 累積所有手牌的 profit
-      cumulativeAll += profit;
-      allHands.push({
-        handNumber,
-        cumulativeProfit: parseFloat(cumulativeAll.toFixed(2)),
-        timestamp: hand.hand_start_time
-      });
+          hands.forEach((hand, index) => {
+        const handNumber = index + 1;
+        const profit = hand.hero_profit;
+        const rake = hand.hero_rake;
+        
+        // rake 只有在 hero_profit > 0 (贏錢) 時才存在
+        const adjustedRake = profit > 0 ? rake : 0;
+        
+        // 累積總體 profit (含rake) - 只有贏錢時才加上rake
+        cumulativeAllWithRake += profit + adjustedRake;
+        allHandsWithRake.push({
+          handNumber,
+          cumulativeProfit: parseFloat(cumulativeAllWithRake.toFixed(2)),
+          timestamp: hand.hand_start_time
+        });
+
+        // 累積實際 profit (不含rake)
+        cumulativeAllActual += profit;
+        allHandsActual.push({
+          handNumber,
+          cumulativeProfit: parseFloat(cumulativeAllActual.toFixed(2)),
+          timestamp: hand.hand_start_time
+        });
 
       // 根據是否攤牌分別累積，但每條線都要有相同的長度
       const isShowdown = hand.hero_hand_result === HandResult.SHOWDOWN_WIN || 
@@ -133,7 +148,8 @@ export class ChartCommand {
     });
 
     return {
-      allHands,
+      allHandsWithRake,
+      allHandsActual,
       showdownOnly,
       noShowdownOnly
     };
@@ -156,13 +172,27 @@ export class ChartCommand {
       data: {
         datasets: [
           {
-            label: '總體 Profit',
-            data: data.allHands.map(point => ({
+            label: 'Profit without rake',
+            data: data.allHandsWithRake.map(point => ({
               x: point.handNumber,
               y: point.cumulativeProfit
             })),
-            borderColor: 'rgb(34, 197, 94)', // 綠色
-            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+            borderColor: 'rgba(134, 239, 172, 0.6)', // 淡綠色
+            backgroundColor: 'rgba(134, 239, 172, 0.05)',
+            borderWidth: 2,
+            fill: false,
+            tension: 0.1,
+            pointRadius: 0, // 隱藏資料點
+            pointHoverRadius: 3
+          },
+          {
+            label: 'No Showdown Profit',
+            data: data.noShowdownOnly.map(point => ({
+              x: point.handNumber,
+              y: point.cumulativeProfit
+            })),
+            borderColor: 'rgb(239, 68, 68)', // 紅色
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
             borderWidth: 2,
             fill: false,
             tension: 0.1,
@@ -184,13 +214,13 @@ export class ChartCommand {
             pointHoverRadius: 3
           },
           {
-            label: 'No Showdown Profit',
-            data: data.noShowdownOnly.map(point => ({
+            label: 'Actual profit (after rake)',
+            data: data.allHandsActual.map(point => ({
               x: point.handNumber,
               y: point.cumulativeProfit
             })),
-            borderColor: 'rgb(239, 68, 68)', // 紅色
-            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            borderColor: 'rgb(34, 197, 94)', // 深綠色
+            backgroundColor: 'rgba(34, 197, 94, 0.1)',
             borderWidth: 2,
             fill: false,
             tension: 0.1,
@@ -314,9 +344,11 @@ export class ChartCommand {
 
     console.log(`📈 Chart generated successfully: ${filePath}`);
     console.log(`📊 Chart statistics:`);
-    console.log(`   - Total hands: ${data.allHands.length}`);
-    console.log(`   - All three lines have ${data.allHands.length} data points`);
-    console.log(`   - Final total profit: ${data.allHands[data.allHands.length - 1]?.cumulativeProfit || 0}`);
+    console.log(`   - Total hands: ${data.allHandsWithRake.length}`);
+    console.log(`   - All four lines have ${data.allHandsWithRake.length} data points`);
+    console.log(`   - Profit without rake: ${data.allHandsWithRake[data.allHandsWithRake.length - 1]?.cumulativeProfit || 0}`);
+    console.log(`   - Actual profit (after rake): ${data.allHandsActual[data.allHandsActual.length - 1]?.cumulativeProfit || 0}`);
+    console.log(`   - Rake total impact: ${((data.allHandsWithRake[data.allHandsWithRake.length - 1]?.cumulativeProfit || 0) - (data.allHandsActual[data.allHandsActual.length - 1]?.cumulativeProfit || 0)).toFixed(2)}`);
     console.log(`   - Final showdown profit: ${data.showdownOnly[data.showdownOnly.length - 1]?.cumulativeProfit || 0}`);
     console.log(`   - Final no-showdown profit: ${data.noShowdownOnly[data.noShowdownOnly.length - 1]?.cumulativeProfit || 0}`);
 

@@ -1,11 +1,10 @@
+import path from 'path';
 import { SqliteManager } from '../database/sqlite-manager';
 import { ChartCalculator } from '../charts/chart-calculator';
 import { ChartGenerator } from '../charts/chart-generator';
-import { ChartCommandOptions } from '../charts/chart-types';
-import path from 'path';
-
-// Re-export the ChartCommandOptions for backward compatibility
-export { ChartCommandOptions } from '../charts/chart-types';
+import { ChartCommandOptions, FinalStatistics } from '../types';
+import { DATABASE, CHARTS, LOG_EMOJIS } from '../constants';
+import { createError } from '../utils';
 
 export class ChartCommand {
   private sqliteManager: SqliteManager;
@@ -15,8 +14,8 @@ export class ChartCommand {
 
   constructor(options: ChartCommandOptions) {
     this.options = options;
-    const dbPath = options.dbPath || path.join(process.cwd(), 'data', 'poker.db');
-    const outputDir = options.outputDir || path.join(process.cwd(), 'charts');
+    const dbPath = options.dbPath || path.join(process.cwd(), 'data', DATABASE.DEFAULT_PATH.split('/').pop()!);
+    const outputDir = options.outputDir || path.join(process.cwd(), CHARTS.DEFAULT_OUTPUT_DIR.substring(2));
     
     this.sqliteManager = new SqliteManager({ dbPath });
     this.chartCalculator = new ChartCalculator();
@@ -25,73 +24,121 @@ export class ChartCommand {
 
   async execute(): Promise<void> {
     try {
-      console.log('📊 Starting chart command...');
+      console.log(`${LOG_EMOJIS.CHART} Starting chart command...`);
       
-      // 連接資料庫
-      await this.sqliteManager.connect();
-      
-      // 測試資料庫連線
-      const isConnected = await this.sqliteManager.testConnection();
-      if (!isConnected) {
-        throw new Error('Database connection test failed');
-      }
-
-      // 獲取手牌數據
-      const hands = await this.sqliteManager.getPokerHandsForChart(this.options?.dateRange);
+      await this.initializeDatabase();
+      const hands = await this.getHandsData();
       
       if (hands.length === 0) {
-        console.log('⚠️  No poker hands found in the database');
+        console.log(`${LOG_EMOJIS.WARNING} No poker hands found in the database`);
         return;
       }
 
-      console.log(`📈 Processing ${hands.length} hands for chart generation...`);
+      console.log(`${LOG_EMOJIS.CHART} Processing ${hands.length} hands for chart generation...`);
 
-      // 計算數據
-      const interval = this.options.interval || 1;
-      
-      const profitData = this.chartCalculator.calculateProfitData(hands, interval);
-      const bb100Data = this.chartCalculator.calculateBB100Data(hands, interval);
-
-      // 獲取統計數據
+      // Calculate data and generate charts
+      const { profitData, bb100Data } = this.calculateChartData(hands);
+      const streetProfitData = this.chartCalculator.calculateStreetProfitData(hands);
+      const { profitResult, bb100Result, streetProfitResult } = await this.generateCharts(profitData, bb100Data, streetProfitData);
       const statistics = this.chartCalculator.getFinalStatistics(profitData, bb100Data);
 
-      // 生成圖表
-      console.log(`📊 Generating profit trend chart (interval: ${interval} hands)...`);
-      const profitChartResult = await this.chartGenerator.generateProfitChart(profitData);
-      
-      console.log(`📊 Generating BB/100 trend chart (interval: ${interval} hands)...`);
-      const bb100ChartResult = await this.chartGenerator.generateBB100Chart(bb100Data);
-
-      // 輸出結果
-      this.logResults(profitChartResult, bb100ChartResult, statistics);
-
-      console.log('✅ Chart command completed successfully!');
+      // Output results
+      this.logResults(profitResult, bb100Result, streetProfitResult, statistics);
+      console.log(`${LOG_EMOJIS.SUCCESS} Chart command completed successfully!`);
       
     } catch (error) {
-      console.error('❌ Chart command failed:', error);
+      console.error(`${LOG_EMOJIS.ERROR} Chart command failed:`, error);
       throw error;
     } finally {
       await this.sqliteManager.disconnect();
     }
   }
 
-  private logResults(profitResult: any, bb100Result: any, statistics: any): void {
-    console.log(`📈 Charts generated successfully:`);
+  /**
+   * Initialize database connection and test it
+   */
+  private async initializeDatabase(): Promise<void> {
+    await this.sqliteManager.connect();
+    
+    const isConnected = await this.sqliteManager.testConnection();
+    if (!isConnected) {
+      throw createError('Database connection test failed', 'Connection test returned false');
+    }
+  }
+
+  /**
+   * Get hands data from database
+   */
+  private async getHandsData() {
+    try {
+      return await this.sqliteManager.getPokerHandsForChart(this.options?.dateRange);
+    } catch (error) {
+      throw createError('Failed to fetch poker hands for chart', error as Error);
+    }
+  }
+
+  /**
+   * Calculate chart data using the chart calculator
+   */
+  private calculateChartData(hands: any[]) {
+    const interval = this.options.interval || CHARTS.DEFAULT_SAMPLING_INTERVAL;
+    
+    const profitData = this.chartCalculator.calculateProfitData(hands, interval);
+    const bb100Data = this.chartCalculator.calculateBB100Data(hands, interval);
+
+    return { profitData, bb100Data };
+  }
+
+  /**
+   * Generate profit, BB/100 and street profit charts
+   */
+  private async generateCharts(profitData: any, bb100Data: any, streetProfitData: any) {
+    const interval = this.options.interval || CHARTS.DEFAULT_SAMPLING_INTERVAL;
+    
+    console.log(`${LOG_EMOJIS.CHART} Generating profit trend chart (interval: ${interval} hands)...`);
+    const profitResult = await this.chartGenerator.generateProfitChart(profitData);
+    
+    console.log(`${LOG_EMOJIS.CHART} Generating BB/100 trend chart (interval: ${interval} hands)...`);
+    const bb100Result = await this.chartGenerator.generateBB100Chart(bb100Data);
+
+    console.log(`${LOG_EMOJIS.CHART} Generating Street Profit bar chart...`);
+    const streetProfitResult = await this.chartGenerator.generateStreetProfitChart(streetProfitData);
+
+    return { profitResult, bb100Result, streetProfitResult };
+  }
+
+  /**
+   * Log the results of chart generation
+   */
+  private logResults(profitResult: any, bb100Result: any, streetProfitResult: any, statistics: FinalStatistics): void {
+    console.log(`${LOG_EMOJIS.CHART} Charts generated successfully:`);
     console.log(`   - Profit chart: ${profitResult.filePath}`);
     console.log(`   - BB/100 chart: ${bb100Result.filePath}`);
-    console.log(`📊 Chart statistics:`);
+    console.log(`   - Street Profit chart: ${streetProfitResult.filePath}`);
+    
+    this.logStatistics(statistics);
+  }
+
+  /**
+   * Log detailed statistics
+   */
+  private logStatistics(statistics: FinalStatistics): void {
+    console.log(`${LOG_EMOJIS.CHART} Chart statistics:`);
     console.log(`   - Total hands: ${statistics.totalHands}`);
     
     if (statistics.totalHands > 0) {
-      console.log(`   - Profit without rake: ${statistics.statistics.profitWithoutRake}`);
-      console.log(`   - Actual profit (after rake): ${statistics.statistics.actualProfit}`);
-      console.log(`   - Rake total impact: ${statistics.statistics.rakeImpact.toFixed(2)}`);
-      console.log(`   - Final showdown profit: ${statistics.statistics.showdownProfit}`);
-      console.log(`   - Final no-showdown profit: ${statistics.statistics.noShowdownProfit}`);
-      console.log(`   - BB/100 without rake: ${statistics.statistics.bb100WithoutRake.toFixed(2)}`);
-      console.log(`   - BB/100 actual: ${statistics.statistics.bb100Actual.toFixed(2)}`);
-      console.log(`   - BB/100 showdown: ${statistics.statistics.bb100Showdown.toFixed(2)}`);
-      console.log(`   - BB/100 no-showdown: ${statistics.statistics.bb100NoShowdown.toFixed(2)}`);
+      const stats = statistics.statistics;
+      console.log(`   - Profit without rake: ${stats.profitWithoutRake}`);
+      console.log(`   - Actual profit (after rake): ${stats.actualProfit}`);
+      console.log(`   - Rake total impact: ${stats.rakeImpact.toFixed(2)}`);
+      console.log(`   - Final showdown profit: ${stats.showdownProfit}`);
+      console.log(`   - Final no-showdown profit: ${stats.noShowdownProfit}`);
+      console.log(`   - BB/100 without rake: ${stats.bb100WithoutRake.toFixed(2)}`);
+      console.log(`   - BB/100 actual: ${stats.bb100Actual.toFixed(2)}`);
+      console.log(`   - BB/100 showdown: ${stats.bb100Showdown.toFixed(2)}`);
+      console.log(`   - BB/100 no-showdown: ${stats.bb100NoShowdown.toFixed(2)}`);
     }
+    
+    console.log(`${LOG_EMOJIS.INFO} Street Profit Bar Chart created with cumulative profit statistics for each street and result combination`);
   }
 } 

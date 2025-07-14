@@ -1,8 +1,11 @@
-// Chart types and interfaces
-export * from './chart-types';
+/**
+ * Chart module exports
+ * Centralized exports for all chart-related functionality
+ */
 
-// Chart calculator
+// ================== Core Chart Classes ==================
 export { ChartCalculator } from './chart-calculator';
+export { ChartGenerator } from './chart-generator';
 
-// Chart generator  
-export { ChartGenerator } from './chart-generator'; 
+// ================== Type Definitions ==================
+export * from './chart-types'; 

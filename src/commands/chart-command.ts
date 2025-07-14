@@ -47,18 +47,19 @@ export class ChartCommand {
       console.log(`📈 Processing ${hands.length} hands for chart generation...`);
 
       // 計算數據
-      const profitData = this.chartCalculator.calculateProfitData(hands);
-      const bb100SmoothInterval = this.options.bb100SmoothInterval || 100;
-      const bb100Data = this.chartCalculator.calculateBB100Data(hands, bb100SmoothInterval);
+      const interval = this.options.interval || 1;
+      
+      const profitData = this.chartCalculator.calculateProfitData(hands, interval);
+      const bb100Data = this.chartCalculator.calculateBB100Data(hands, interval);
 
       // 獲取統計數據
       const statistics = this.chartCalculator.getFinalStatistics(profitData, bb100Data);
 
       // 生成圖表
-      console.log('📊 Generating profit trend chart...');
+      console.log(`📊 Generating profit trend chart (interval: ${interval} hands)...`);
       const profitChartResult = await this.chartGenerator.generateProfitChart(profitData);
       
-      console.log(`📊 Generating BB/100 trend chart (smooth interval: ${bb100SmoothInterval} hands)...`);
+      console.log(`📊 Generating BB/100 trend chart (interval: ${interval} hands)...`);
       const bb100ChartResult = await this.chartGenerator.generateBB100Chart(bb100Data);
 
       // 輸出結果

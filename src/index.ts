@@ -36,6 +36,7 @@ program
   .option('-o, --output <directory>', 'Output directory for charts (default: ./charts)')
   .option('--start <date>', 'Start date for chart data (YYYY-MM-DD)')
   .option('--end <date>', 'End date for chart data (YYYY-MM-DD)')
+  .option('-i, --interval <number>', 'Chart sampling interval in hands (default: 1)', '1')
   .action(async (options) => {
     try {
       const chartCommand = new ChartCommand({
@@ -44,7 +45,8 @@ program
         dateRange: options.start && options.end ? {
           start: options.start,
           end: options.end
-        } : undefined
+        } : undefined,
+        interval: parseInt(options.interval)
       });
       await chartCommand.execute();
     } catch (error) {

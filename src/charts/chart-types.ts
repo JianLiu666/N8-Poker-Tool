@@ -5,7 +5,7 @@ export interface ChartCommandOptions {
     start: string;
     end: string;
   };
-  bb100SmoothInterval?: number; // BB/100 圖表的平滑間隔，預設 100 手
+  interval?: number; // 所有圖表的統一取樣間隔，預設 1 手（每手都記錄）
 }
 
 export interface ChartDataPoint {

@@ -6,7 +6,16 @@ export class ChartCalculator {
   /**
    * 計算累積 profit 數據
    */
-  calculateProfitData(hands: PokerHand[]): ProfitChartData {
+  calculateProfitData(hands: PokerHand[], smoothInterval: number = 1): ProfitChartData {
+    return this.calculateSmoothProfitData(hands, smoothInterval);
+  }
+
+  /**
+   * 計算平滑的 profit 數據
+   * @param hands 手牌數據
+   * @param interval 取樣間隔（每多少手記錄一個節點）
+   */
+  private calculateSmoothProfitData(hands: PokerHand[], interval: number = 1): ProfitChartData {
     const allHandsWithRake: ChartDataPoint[] = [];
     const allHandsActual: ChartDataPoint[] = [];
     const showdownOnly: ChartDataPoint[] = [];
@@ -27,19 +36,9 @@ export class ChartCalculator {
       
       // 累積總體 profit (含rake) - 只有贏錢時才加上rake
       cumulativeAllWithRake += profit + adjustedRake;
-      allHandsWithRake.push({
-        handNumber,
-        value: parseFloat(cumulativeAllWithRake.toFixed(2)),
-        timestamp: hand.hand_start_time
-      });
-
+      
       // 累積實際 profit (不含rake)
       cumulativeAllActual += profit;
-      allHandsActual.push({
-        handNumber,
-        value: parseFloat(cumulativeAllActual.toFixed(2)),
-        timestamp: hand.hand_start_time
-      });
 
       // 根據是否攤牌分別累積，但每條線都要有相同的長度
       const isShowdown = hand.hero_hand_result === HandResult.SHOWDOWN_WIN || 
@@ -55,18 +54,36 @@ export class ChartCalculator {
         // cumulativeShowdown += 0; // 不變
       }
 
-      // 兩條線都要有相同的資料點數量
-      showdownOnly.push({
-        handNumber,
-        value: parseFloat(cumulativeShowdown.toFixed(2)),
-        timestamp: hand.hand_start_time
-      });
+      // 只在達到取樣間隔或最後一手時記錄數據點
+      const isLastHand = index === hands.length - 1;
+      const shouldRecord = handNumber % interval === 0 || isLastHand;
 
-      noShowdownOnly.push({
-        handNumber,
-        value: parseFloat(cumulativeNoShowdown.toFixed(2)),
-        timestamp: hand.hand_start_time
-      });
+      if (shouldRecord) {
+        allHandsWithRake.push({
+          handNumber,
+          value: parseFloat(cumulativeAllWithRake.toFixed(2)),
+          timestamp: hand.hand_start_time
+        });
+
+        allHandsActual.push({
+          handNumber,
+          value: parseFloat(cumulativeAllActual.toFixed(2)),
+          timestamp: hand.hand_start_time
+        });
+
+        // 兩條線都要有相同的資料點數量
+        showdownOnly.push({
+          handNumber,
+          value: parseFloat(cumulativeShowdown.toFixed(2)),
+          timestamp: hand.hand_start_time
+        });
+
+        noShowdownOnly.push({
+          handNumber,
+          value: parseFloat(cumulativeNoShowdown.toFixed(2)),
+          timestamp: hand.hand_start_time
+        });
+      }
     });
 
     return {

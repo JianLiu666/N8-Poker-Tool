@@ -9,15 +9,17 @@ import {
   ChartGenerationResult, 
   ChartConfig,
   YAxisRange,
-  StreetProfitBarData,
-  StreetProfitStats,
   CompositePositionChartData,
+  PositionStreetProfitStats,
+  StreetProfitBarData,
 } from './chart-types';
 import { CHARTS, CHART_COLORS } from '../constants';
 import { formatTimestamp, ensureDirectoryExists } from '../utils';
 
 // Register Chart.js components
 Chart.register(...registerables, ChartDataLabels);
+
+type ChartType = 'profit' | 'bb100' | 'composite-position';
 
 /**
  * Chart generator class responsible for creating visual charts from poker data
@@ -29,6 +31,8 @@ export class ChartGenerator {
   constructor(outputDir: string) {
     this.outputDir = outputDir;
   }
+
+  // ===== PUBLIC CHART GENERATION METHODS =====
 
   /**
    * Generate profit trend chart showing cumulative profit over time
@@ -42,7 +46,7 @@ export class ChartGenerator {
   }
 
   /**
-   * Generate BB/100 trend chart with dynamic Y-axis scaling
+   * Generate BB/100 trend chart showing BB/100 over time
    */
   async generateBB100Chart(data: BB100ChartData): Promise<ChartGenerationResult> {
     const config = this.createChartConfig('bb100');
@@ -54,18 +58,7 @@ export class ChartGenerator {
   }
 
   /**
-   * Generate street-based profit bar chart with conditional coloring
-   */
-  async generateStreetProfitChart(data: StreetProfitBarData): Promise<ChartGenerationResult> {
-    const config = this.createChartConfig('street-profit');
-    const chartConfig = this.buildBarChartConfiguration(data, config);
-    
-    const finalValues = this.extractStreetProfitFinalValues(data.dataPoints);
-    return this.renderChart(chartConfig, config, finalValues);
-  }
-
-  /**
-   * Generate composite position profit chart with 7 subplots
+   * Generate composite position profit chart with multiple position analysis
    */
   async generateCompositePositionChart(data: CompositePositionChartData): Promise<ChartGenerationResult> {
     const config = this.createChartConfig('composite-position');
@@ -81,10 +74,12 @@ export class ChartGenerator {
     };
   }
 
+  // ===== CHART CONFIGURATION METHODS =====
+
   /**
    * Create standardized chart configuration based on chart type
    */
-  private createChartConfig(type: 'profit' | 'bb100' | 'street-profit' | 'composite-position'): ChartConfig {
+  private createChartConfig(type: ChartType): ChartConfig {
     const timestamp = formatTimestamp();
     const configs = {
       'profit': {
@@ -99,12 +94,6 @@ export class ChartGenerator {
         yAxisLabel: 'BB/100',
         fileName: `poker-bb100-chart-${timestamp}`
       },
-      'street-profit': {
-        title: 'Poker Street Profit Analysis',
-        xAxisLabel: 'Street Categories',
-        yAxisLabel: 'Cumulative Profit',
-        fileName: `poker-street-profit-chart-${timestamp}`
-      },
       'composite-position': {
         title: 'Poker Composite Position Profit Analysis',
         xAxisLabel: 'Position',
@@ -116,7 +105,7 @@ export class ChartGenerator {
     const baseConfig = configs[type];
     return {
       width: CHARTS.DEFAULT_WIDTH,
-      height: type === 'composite-position' ? CHARTS.DEFAULT_HEIGHT * 2 : CHARTS.DEFAULT_HEIGHT, // Double height for composite chart
+      height: type === 'composite-position' ? CHARTS.DEFAULT_HEIGHT * 2 : CHARTS.DEFAULT_HEIGHT,
       ...baseConfig,
       fileName: `${baseConfig.fileName}${CHARTS.DEFAULT_FILE_EXTENSION}`
     };
@@ -198,129 +187,7 @@ export class ChartGenerator {
     };
   }
 
-  /**
-   * Build street profit chart configuration
-   */
-  private buildBarChartConfiguration(data: StreetProfitBarData, config: ChartConfig): ChartConfiguration {
-    return {
-      type: 'bar',
-      data: {
-        labels: data.dataPoints.map(point => point.category),
-        datasets: [{
-          label: 'Cumulative Profit',
-          data: data.dataPoints.map(point => point.totalProfit),
-          backgroundColor: data.dataPoints.map(point => 
-            point.totalProfit >= 0 ? CHART_COLORS.BAR_WINS : CHART_COLORS.BAR_LOSSES
-          ),
-          borderColor: data.dataPoints.map(point => 
-            point.totalProfit >= 0 ? CHART_COLORS.BAR_WINS_BORDER : CHART_COLORS.BAR_LOSSES_BORDER
-          ),
-          borderWidth: 1,
-          barPercentage: 0.8,
-          categoryPercentage: 0.9
-        }]
-      },
-      options: {
-        responsive: false,
-        animation: false as const,
-        layout: {
-          padding: 20
-        },
-        backgroundColor: CHARTS.BACKGROUND_COLOR,
-        scales: {
-          x: {
-            title: {
-              display: true,
-              text: config.xAxisLabel,
-              font: {
-                size: 14,
-                weight: 'bold'
-              }
-            },
-            ticks: {
-              maxRotation: 45,
-              minRotation: 45,
-              font: {
-                size: 10
-              }
-            },
-            grid: {
-              display: true,
-              color: 'rgba(0, 0, 0, 0.1)'
-            }
-          },
-          y: {
-            title: {
-              display: true,
-              text: config.yAxisLabel,
-              font: {
-                size: 14,
-                weight: 'bold'
-              }
-            },
-            ticks: {
-              font: {
-                size: 12
-              }
-            },
-            grid: {
-              display: true,
-              color: 'rgba(0, 0, 0, 0.1)'
-            },
-            beginAtZero: true
-          }
-        },
-        plugins: {
-          title: {
-            display: true,
-            text: config.title,
-            font: {
-              size: 18,
-              weight: 'bold'
-            },
-            padding: {
-              top: 10,
-              bottom: 30
-            }
-          },
-          legend: {
-            display: true,
-            position: 'top' as const,
-            labels: {
-              font: {
-                size: 12
-              }
-            }
-          },
-          datalabels: {
-            display: true,
-            anchor: 'end' as const,
-            align: 'top' as const,
-            color: '#000000',
-            font: {
-              size: 11,
-              weight: 'bold'
-            },
-            formatter: (value: number) => {
-              // Format the value with appropriate decimal places and sign
-              const formattedValue = Math.abs(value) < 0.01 ? value.toFixed(3) : value.toFixed(2);
-              return value >= 0 ? `+${formattedValue}` : formattedValue;
-            },
-            backgroundColor: 'rgba(255, 255, 255, 0.8)',
-            borderColor: 'rgba(0, 0, 0, 0.2)',
-            borderWidth: 1,
-            borderRadius: 4,
-            padding: {
-              top: 2,
-              right: 4,
-              bottom: 2,
-              left: 4
-            }
-          }
-        }
-      }
-    };
-  }
+  // ===== DATASET AND CALCULATION METHODS =====
 
   /**
    * Create dataset for line charts
@@ -392,29 +259,6 @@ export class ChartGenerator {
   }
 
   /**
-   * Calculate final values for street profit chart
-   */
-  private extractStreetProfitFinalValues(stats: StreetProfitStats[]): Record<string, number> {
-    const finalValues: Record<string, number> = {};
-    stats.forEach(stat => {
-      finalValues[stat.category] = stat.totalProfit;
-    });
-    return finalValues;
-  }
-
-  /**
-   * Calculate final values for BB/100 chart
-   */
-  private extractBB100FinalValues(data: BB100ChartData): Record<string, number> {
-    return {
-      'Profit without rake BB/100': this.getLastValue(data.allHandsWithRakeBB100),
-      'Actual profit BB/100': this.getLastValue(data.allHandsActualBB100),
-      'Showdown BB/100': this.getLastValue(data.showdownOnlyBB100),
-      'No Showdown BB/100': this.getLastValue(data.noShowdownOnlyBB100)
-    };
-  }
-
-  /**
    * Calculate final values for composite position chart
    */
   private extractCompositePositionFinalValues(data: CompositePositionChartData): Record<string, number> {
@@ -432,6 +276,8 @@ export class ChartGenerator {
     
     return finalValues;
   }
+
+  // ===== COMPOSITE CHART RENDERING METHODS =====
 
   /**
    * Calculate total hands from composite data
@@ -734,6 +580,8 @@ export class ChartGenerator {
     ctx.restore();
   }
 
+  // ===== CHART RENDERING HELPER METHODS =====
+
   /**
    * Draw Y-axis grid lines and labels
    */
@@ -795,7 +643,7 @@ export class ChartGenerator {
     }
   }
 
-
+  // ===== CHART OPTIONS CONFIGURATION METHODS =====
 
   /**
    * Create chart options with standardized styling
@@ -1003,6 +851,8 @@ export class ChartGenerator {
     await fs.writeFile(filePath, buffer);
   }
 
+  // ===== UTILITY METHODS =====
+
   /**
    * Calculate total hands from chart configuration
    */
@@ -1029,6 +879,18 @@ export class ChartGenerator {
       'Actual profit (after rake)': this.getLastValue(data.allHandsActual),
       'Showdown profit': this.getLastValue(data.showdownOnly),
       'No showdown profit': this.getLastValue(data.noShowdownOnly)
+    };
+  }
+
+  /**
+   * Extract final values for BB/100 chart
+   */
+  private extractBB100FinalValues(data: BB100ChartData): Record<string, number> {
+    return {
+      'Profit without rake BB/100': this.getLastValue(data.allHandsWithRakeBB100),
+      'Actual profit BB/100': this.getLastValue(data.allHandsActualBB100),
+      'Showdown BB/100': this.getLastValue(data.showdownOnlyBB100),
+      'No Showdown BB/100': this.getLastValue(data.noShowdownOnlyBB100)
     };
   }
 } 

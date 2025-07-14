@@ -19,7 +19,9 @@ import { roundToDecimals, isShowdownResult } from '../utils';
  */
 export class ChartCalculator {
   
-  // Constants for better maintainability
+  // ===== CONSTANTS =====
+  
+  // Constants for categorizing poker hands by street and result
   private static readonly STREET_CATEGORIES = [
     { street: 'preflop', result: 'win', label: 'Preflop Win' },
     { street: 'preflop', result: 'loss', label: 'Preflop Loss' },
@@ -33,19 +35,17 @@ export class ChartCalculator {
     { street: 'showdown', result: 'loss', label: 'Showdown Loss' }
   ] as const;
 
+  // ===== PUBLIC CALCULATION METHODS =====
+
   /**
    * Calculate cumulative profit data with optional smoothing for better performance
-   * @param hands - Array of poker hands to process
-   * @param smoothInterval - Interval for data point sampling (default from constants)
    */
   calculateProfitData(hands: PokerHand[], smoothInterval: number = CHARTS.DEFAULT_SAMPLING_INTERVAL): ProfitChartData {
     return this.processProfitDataWithSmoothing(hands, smoothInterval);
   }
 
   /**
-   * Calculate BB/100 data with optimized smoothing for trend analysis
-   * @param hands - Array of poker hands to process  
-   * @param smoothInterval - Interval for BB/100 sampling (default from constants)
+   * Calculate BB/100 data with optional smoothing
    */
   calculateBB100Data(hands: PokerHand[], smoothInterval: number = CHARTS.DEFAULT_BB100_INTERVAL): BB100ChartData {
     return this.processBB100DataWithSmoothing(hands, smoothInterval);
@@ -53,8 +53,7 @@ export class ChartCalculator {
 
   /**
    * Calculate street-based profit statistics for bar chart visualization
-   * Optimized with pre-defined categories for better performance
-   * @param hands - Array of poker hands to process
+   * Used internally by composite position chart
    */
   calculateStreetProfitData(hands: PokerHand[]): StreetProfitBarData {
     const dataPoints: StreetProfitStats[] = [];
@@ -76,7 +75,6 @@ export class ChartCalculator {
 
   /**
    * Calculate composite position-based chart data for all positions plus overall stats
-   * @param hands - Array of poker hands to process
    */
   calculateCompositePositionChartData(hands: PokerHand[]): CompositePositionChartData {
     // Calculate overall statistics (same as existing street profit data)
@@ -110,23 +108,28 @@ export class ChartCalculator {
   }
 
   /**
-   * Get final statistics from chart data
+   * Get final statistics for all chart data
    */
   getFinalStatistics(profitData: ProfitChartData, bb100Data: BB100ChartData): FinalStatistics {
     const totalHands = profitData.allHandsWithRake.length;
     
     if (totalHands === 0) {
-      return { totalHands: 0, statistics: this.createEmptyStatistics() };
+      return {
+        totalHands: 0,
+        statistics: this.createEmptyStatistics()
+      };
     }
 
-    const lastProfitIndex = totalHands - 1;
-    const lastBB100Index = bb100Data.allHandsWithRakeBB100.length - 1;
+    const profitIndex = profitData.allHandsWithRake.length - 1;
+    const bb100Index = bb100Data.allHandsWithRakeBB100.length - 1;
     
     return {
       totalHands,
-      statistics: this.buildStatistics(profitData, bb100Data, lastProfitIndex, lastBB100Index)
+      statistics: this.buildStatistics(profitData, bb100Data, profitIndex, bb100Index)
     };
   }
+
+  // ===== PRIVATE PROCESSING METHODS =====
 
   /**
    * Calculate smooth profit data with interval-based averaging
@@ -208,6 +211,8 @@ export class ChartCalculator {
 
     return result;
   }
+
+  // ===== HELPER METHODS =====
 
   /**
    * Initialize cumulative statistics tracking
@@ -410,6 +415,8 @@ export class ChartCalculator {
       bb100NoShowdown: bb100Data.noShowdownOnlyBB100[bb100Index]?.value || 0
     };
   }
+
+  // ===== UTILITY METHODS =====
 
   /**
    * Filter hands by street and result

@@ -242,7 +242,7 @@ export class ChartCommand {
             display: true,
             title: {
               display: true,
-              text: '牌局數量',
+              text: 'Hands',
               font: {
                 size: 14,
                 weight: 'bold'
@@ -263,7 +263,7 @@ export class ChartCommand {
             display: true,
             title: {
               display: true,
-              text: '累積 Profit',
+              text: 'Cumulative Profit',
               font: {
                 size: 14,
                 weight: 'bold'
@@ -284,7 +284,7 @@ export class ChartCommand {
         plugins: {
           title: {
             display: true,
-            text: 'Poker Profit 趨勢分析',
+            text: 'Poker Profit Trend Analysis',
             font: {
               size: 20,
               weight: 'bold'

@@ -328,4 +328,35 @@ export class SqliteManager {
       });
     });
   }
+
+  /**
+   * 獲取按時間順序排列的手牌數據（從舊到新），用於生成趨勢圖表
+   * @param dateRange 可選的日期範圍篩選
+   * @returns 按時間排序的手牌數據數組
+   */
+  async getPokerHandsForChart(dateRange?: { start: string; end: string }): Promise<PokerHand[]> {
+    if (!this.db) {
+      throw new Error('Database not connected');
+    }
+
+    let sql = 'SELECT * FROM poker_hands';
+    const params: any[] = [];
+
+    if (dateRange) {
+      sql += ' WHERE hand_start_time >= ? AND hand_start_time <= ?';
+      params.push(dateRange.start, dateRange.end);
+    }
+
+    sql += ' ORDER BY hand_start_time ASC'; // 按時間從舊到新排序
+
+    return new Promise((resolve, reject) => {
+      this.db!.all(sql, params, (err, rows) => {
+        if (err) {
+          reject(new Error(`Failed to get poker hands for chart: ${err.message}`));
+        } else {
+          resolve(rows as PokerHand[]);
+        }
+      });
+    });
+  }
 } 

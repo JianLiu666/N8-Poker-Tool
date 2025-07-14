@@ -9,8 +9,8 @@ data/
 *.db
 *.sqlite
 
-# Charts output
-charts/
+# Charts output (generated files, not source code)
+/charts/
 
 # Logs
 hand_logs/

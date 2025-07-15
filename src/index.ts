@@ -55,6 +55,7 @@ function addChartCommand(program: Command): void {
     .option('--start <date>', 'Start date for chart data (YYYY-MM-DD)')
     .option('--end <date>', 'End date for chart data (YYYY-MM-DD)')
     .option('-i, --interval <number>', 'Chart sampling interval in hands (default: 1)', '1')
+    .option('--combined-only', 'Generate only the combined analysis chart (action + profit)')
     .action(async (options) => {
       await executeCommand('chart', async () => {
         const chartOptions: ChartCommandOptions = {
@@ -64,7 +65,8 @@ function addChartCommand(program: Command): void {
             start: options.start,
             end: options.end
           } : undefined,
-          interval: parseInt(options.interval, 10)
+          interval: parseInt(options.interval, 10),
+          combinedOnly: options.combinedOnly
         };
         
         const chartCommand = new ChartCommand(chartOptions);

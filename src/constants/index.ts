@@ -28,6 +28,11 @@ export const CHARTS = {
   DEFAULT_HEIGHT: 800,
   DEFAULT_QUALITY: 0.95,
   
+  // Combined chart dimensions (higher resolution)
+  COMBINED_WIDTH: 2400,
+  COMBINED_HEIGHT: 1600,
+  COMBINED_QUALITY: 0.98,
+  
   // Data processing settings
   DEFAULT_SAMPLING_INTERVAL: 1,
   DEFAULT_BB100_INTERVAL: 100

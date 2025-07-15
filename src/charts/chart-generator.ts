@@ -22,7 +22,7 @@ import { formatTimestamp, ensureDirectoryExists } from '../utils';
 // Register Chart.js components
 Chart.register(...registerables, ChartDataLabels);
 
-type ChartType = 'profit' | 'bb100' | 'street-profit-analysis' | 'action-analysis';
+type ChartType = 'profit' | 'bb100' | 'street-profit-analysis' | 'action-analysis' | 'combined-analysis';
 
 /**
  * Chart generator class responsible for creating visual charts from poker data
@@ -96,6 +96,30 @@ export class ChartGenerator {
     };
   }
 
+  /**
+   * Generate combined analysis chart with Action Analysis on left and Street Profit Analysis on right
+   */
+  async generateCombinedAnalysisChart(
+    actionData: CompleteActionAnalysisChartData,
+    profitData: CompleteStreetProfitChartData
+  ): Promise<ChartGenerationResult> {
+    const config = this.createChartConfig('combined-analysis');
+    const actionFinalValues = this.extractActionAnalysisFinalValues(actionData);
+    const profitFinalValues = this.extractStreetProfitFinalValues(profitData);
+    
+    // Combine final values
+    const finalValues = { ...actionFinalValues, ...profitFinalValues };
+    
+    // Create combined chart
+    const filePath = await this.renderCombinedAnalysisChart(actionData, profitData, config);
+    
+    return {
+      filePath,
+      totalHands: this.calculateTotalHandsFromActionAnalysis(actionData),
+      finalValues
+    };
+  }
+
   // ===== CHART CONFIGURATION METHODS =====
 
   /**
@@ -128,13 +152,20 @@ export class ChartGenerator {
         xAxisLabel: 'Position',
         yAxisLabel: 'Percentage (%)',
         fileName: `poker-action-analysis-chart-${timestamp}`
+      },
+      'combined-analysis': {
+        title: 'Poker Analysis - Action & Profit',
+        xAxisLabel: 'Position',
+        yAxisLabel: 'Analysis',
+        fileName: `poker-combined-analysis-chart-${timestamp}`
       }
     };
 
     const baseConfig = configs[type];
     return {
-      width: CHARTS.DEFAULT_WIDTH,
-      height: (type === 'street-profit-analysis' || type === 'action-analysis') ? CHARTS.DEFAULT_HEIGHT * 2 : CHARTS.DEFAULT_HEIGHT,
+      width: type === 'combined-analysis' ? CHARTS.COMBINED_WIDTH : CHARTS.DEFAULT_WIDTH,
+      height: type === 'combined-analysis' ? CHARTS.COMBINED_HEIGHT : 
+              (type === 'street-profit-analysis' || type === 'action-analysis') ? CHARTS.DEFAULT_HEIGHT * 2 : CHARTS.DEFAULT_HEIGHT,
       ...baseConfig,
       fileName: `${baseConfig.fileName}${CHARTS.DEFAULT_FILE_EXTENSION}`
     };
@@ -910,6 +941,164 @@ export class ChartGenerator {
     const filePath = path.join(this.outputDir, config.fileName);
     await this.saveChart(canvas, filePath);
     return filePath;
+  }
+
+  /**
+   * Render combined analysis chart with Action Analysis on left and Street Profit Analysis on right
+   */
+  private async renderCombinedAnalysisChart(
+    actionData: CompleteActionAnalysisChartData,
+    profitData: CompleteStreetProfitChartData,
+    config: ChartConfig
+  ): Promise<string> {
+    await ensureDirectoryExists(this.outputDir);
+
+    // Create high-resolution canvas
+    const canvas = createCanvas(config.width, config.height);
+    const ctx = canvas.getContext('2d');
+
+    // Draw white background
+    ctx.fillStyle = CHARTS.BACKGROUND_COLOR;
+    ctx.fillRect(0, 0, config.width, config.height);
+
+    // Define dimensions for left and right halves
+    const halfWidth = config.width / 2;
+    const separatorWidth = 4;
+    const leftWidth = halfWidth - separatorWidth / 2;
+    const rightWidth = halfWidth - separatorWidth / 2;
+    const rightStartX = halfWidth + separatorWidth / 2;
+
+    // Draw main title
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 24px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Poker Analysis - Street Action & Profit', config.width / 2, 40);
+
+    // Draw section titles
+    ctx.font = 'bold 18px Arial';
+    ctx.fillText('Street Action Analysis', leftWidth / 2, 80);
+    ctx.fillText('Street Profit Analysis', rightStartX + rightWidth / 2, 80);
+
+    // Draw separator line
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.lineWidth = separatorWidth;
+    ctx.beginPath();
+    ctx.moveTo(halfWidth, 100);
+    ctx.lineTo(halfWidth, config.height - 20);
+    ctx.stroke();
+
+    // Calculate chart dimensions for each section
+    const chartTopMargin = 100;
+    const chartHeight = config.height - chartTopMargin - 20;
+    const sectionHeight = Math.floor((chartHeight - (4 * 10)) / 5); // 4 separators between 5 charts
+
+    // Render left side - Action Analysis
+    await this.renderActionAnalysisSection(
+      ctx,
+      actionData,
+      0,
+      chartTopMargin,
+      leftWidth,
+      chartHeight,
+      sectionHeight
+    );
+
+    // Render right side - Street Profit Analysis
+    await this.renderStreetProfitSection(
+      ctx,
+      profitData,
+      rightStartX,
+      chartTopMargin,
+      rightWidth,
+      chartHeight,
+      sectionHeight
+    );
+
+    const filePath = path.join(this.outputDir, config.fileName);
+    await this.saveChart(canvas, filePath);
+    return filePath;
+  }
+
+  /**
+   * Render all 5 action analysis sections in a column
+   */
+  private async renderActionAnalysisSection(
+    ctx: any,
+    data: CompleteActionAnalysisChartData,
+    x: number,
+    y: number,
+    width: number,
+    totalHeight: number,
+    sectionHeight: number
+  ): Promise<void> {
+    const separatorMargin = 10;
+    let currentY = y;
+
+    const stages = ['preflop', 'flop', 'turn', 'river', 'showdown'];
+    const stageLabels = {
+      'preflop': 'Preflop Action Analysis',
+      'flop': 'Flop Action Analysis', 
+      'turn': 'Turn Action Analysis',
+      'river': 'River Action Analysis',
+      'showdown': 'Showdown Win% Analysis'
+    };
+
+    for (const stage of stages) {
+      const stageData = data[stage as keyof CompleteActionAnalysisChartData];
+      if (stageData) {
+        await this.renderSingleActionAnalysisSection(
+          ctx,
+          stageData,
+          stageLabels[stage as keyof typeof stageLabels],
+          x,
+          currentY,
+          width,
+          sectionHeight
+        );
+        currentY += sectionHeight + separatorMargin;
+      }
+    }
+  }
+
+  /**
+   * Render all 5 street profit analysis sections in a column
+   */
+  private async renderStreetProfitSection(
+    ctx: any,
+    data: CompleteStreetProfitChartData,
+    x: number,
+    y: number,
+    width: number,
+    totalHeight: number,
+    sectionHeight: number
+  ): Promise<void> {
+    const separatorMargin = 10;
+    let currentY = y;
+
+    const stages = ['preflop', 'flop', 'turn', 'river', 'showdown'];
+    const stageLabels = {
+      'preflop': 'Preflop Profit Analysis',
+      'flop': 'Flop Profit Analysis', 
+      'turn': 'Turn Profit Analysis',
+      'river': 'River Profit Analysis',
+      'showdown': 'Showdown Profit Analysis'
+    };
+
+    for (const stage of stages) {
+      const stageData = data[stage as keyof CompleteStreetProfitChartData];
+      if (stageData) {
+        await this.renderSingleStreetProfitSection(
+          ctx,
+          stageData,
+          stageLabels[stage as keyof typeof stageLabels],
+          x,
+          currentY,
+          width,
+          sectionHeight
+        );
+        currentY += sectionHeight + separatorMargin;
+      }
+    }
   }
 
   /**

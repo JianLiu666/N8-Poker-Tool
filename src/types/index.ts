@@ -19,6 +19,7 @@ export interface ChartCommandOptions {
   outputDir?: string;
   dateRange?: DateRange;
   interval?: number;
+  combinedOnly?: boolean;
 }
 
 export interface DateRange {

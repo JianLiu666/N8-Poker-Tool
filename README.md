@@ -48,16 +48,23 @@ npm start parse -i <input_dir> [-d <database_path>]
 
 ### Chart Command
 ```bash
-npm start chart [-o <output_dir>] [-d <database_path>] [--start <date>] [--end <date>]
+node dist/index.js chart [-o <output_dir>] [-d <database_path>] [--start <date>] [--end <date>] [--combined-only]
 ```
 - `-o, --output` - Chart output directory (optional, default: `./charts`)
 - `-d, --database` - Database path (optional, default: `./data/poker.db`)
 - `--start` - Start date (YYYY-MM-DD format, optional)
 - `--end` - End date (YYYY-MM-DD format, optional)
+- `--combined-only` - Generate only the high-resolution combined analysis chart (optional)
 
 ## Chart Analysis
 
-The generated chart shows four trend lines:
+### Combined Analysis Chart (New!)
+The `--combined-only` option generates a high-resolution (2400x1600px) combined chart with:
+- **Left half**: Street Action Analysis (5 sections showing action percentages by position)
+- **Right half**: Street Profit Analysis (5 sections showing profit/loss by position)
+
+### Standard Charts
+The profit trend chart shows four trend lines:
 - **Profit without rake** - Performance without rake deduction
 - **Actual profit** - Real money flow after rake
 - **Showdown profit** - Profit from hands that went to showdown

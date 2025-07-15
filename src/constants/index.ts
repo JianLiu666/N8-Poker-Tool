@@ -47,6 +47,14 @@ export const CHART_COLORS = {
   BAR_WINS_BORDER: 'rgb(34, 197, 94)',
   BAR_LOSSES_BORDER: 'rgb(239, 68, 68)',
   
+  // Action Analysis colors
+  ACTION_RAISE: 'rgba(153, 27, 27, 0.8)',      // Dark red
+  ACTION_BET: 'rgba(239, 68, 68, 0.8)',        // Light red
+  ACTION_CALL: 'rgba(21, 128, 61, 0.8)',       // Dark green
+  ACTION_CHECK: 'rgba(134, 239, 172, 0.8)',    // Light green
+  ACTION_FOLD: 'rgba(147, 197, 253, 0.8)',     // Light blue
+  ACTION_WIN_RATE: 'rgba(34, 197, 94, 0.8)',   // Green for win rate
+  
   // General styling
   BACKGROUND_ALPHA: 0.1,
   BAR_BACKGROUND_ALPHA: 0.8,

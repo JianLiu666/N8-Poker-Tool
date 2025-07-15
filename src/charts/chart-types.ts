@@ -11,5 +11,8 @@ export {
   FinalStatistics,
   StreetProfitPositionStats,
   StreetProfitAnalysisData,
-  CompleteStreetProfitChartData
+  CompleteStreetProfitChartData,
+  ActionAnalysisPositionStats,
+  StreetActionAnalysisData,
+  CompleteActionAnalysisChartData
 } from '../types'; 

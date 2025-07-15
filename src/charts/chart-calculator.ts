@@ -7,7 +7,10 @@ import {
   StatisticsData,
   StreetProfitPositionStats,
   StreetProfitAnalysisData,
-  CompleteStreetProfitChartData
+  CompleteStreetProfitChartData,
+  ActionAnalysisPositionStats,
+  StreetActionAnalysisData,
+  CompleteActionAnalysisChartData
 } from './chart-types';
 import { CHARTS } from '../constants';
 import { roundToDecimals, isShowdownResult } from '../utils';
@@ -41,6 +44,35 @@ export class ChartCalculator {
 
 
 
+
+  /**
+   * Calculate action analysis chart data for action proportion analysis by position
+   */
+  calculateActionAnalysisChartData(hands: PokerHand[]): CompleteActionAnalysisChartData {
+    const stages = ['preflop', 'flop', 'turn', 'river', 'showdown'];
+    const positions = [
+      PokerPosition.UTG,
+      PokerPosition.HJ,
+      PokerPosition.CO,
+      PokerPosition.BTN,
+      PokerPosition.SB,
+      PokerPosition.BB
+    ];
+
+    const result: any = {};
+
+    stages.forEach(stage => {
+      if (stage === 'showdown') {
+        // For showdown, calculate win percentage instead of actions
+        result[stage] = this.calculateShowdownWinRates(hands, positions);
+      } else {
+        // For preflop, flop, turn, river - calculate action proportions
+        result[stage] = this.calculateActionProportions(hands, stage, positions);
+      }
+    });
+
+    return result as CompleteActionAnalysisChartData;
+  }
 
   /**
    * Calculate street profit analysis chart data for profit/loss analysis by position
@@ -113,6 +145,158 @@ export class ChartCalculator {
     });
 
     return result as CompleteStreetProfitChartData;
+  }
+
+  // ===== ACTION ANALYSIS HELPER METHODS =====
+
+  /**
+   * Calculate action proportions for a specific street and all positions
+   */
+  private calculateActionProportions(hands: PokerHand[], stage: string, positions: PokerPosition[]): StreetActionAnalysisData {
+    const positionStats: ActionAnalysisPositionStats[] = [];
+
+    // Calculate overall statistics first
+    const overallStats = this.calculatePositionActionStats(hands, stage, null);
+    positionStats.push(overallStats);
+
+    // Calculate for each specific position
+    positions.forEach(position => {
+      const positionActionStats = this.calculatePositionActionStats(hands, stage, position);
+      positionStats.push(positionActionStats);
+    });
+
+    return {
+      stage: stage,
+      positions: positionStats
+    };
+  }
+
+  /**
+   * Calculate showdown win rates for all positions
+   */
+  private calculateShowdownWinRates(hands: PokerHand[], positions: PokerPosition[]): StreetActionAnalysisData {
+    const positionStats: ActionAnalysisPositionStats[] = [];
+    
+    // Filter hands that went to showdown
+    const showdownHands = hands.filter(hand => hand.final_stage === 'showdown');
+
+    // Calculate overall win rate
+    const overallWins = showdownHands.filter(hand => hand.hero_profit > 0).length;
+    const overallTotal = showdownHands.length;
+    const overallWinRate = overallTotal > 0 ? (overallWins / overallTotal) * 100 : 0;
+
+    positionStats.push({
+      position: 'Overall',
+      raisePct: overallWinRate,  // Use raisePct to store win rate for consistency
+      betPct: 0,
+      callPct: 0,
+      checkPct: 0,
+      foldPct: 0,
+      totalHands: overallTotal
+    });
+
+    // Calculate for each position
+    positions.forEach(position => {
+      const positionShowdownHands = showdownHands.filter(hand => hand.hero_position === position);
+      const positionWins = positionShowdownHands.filter(hand => hand.hero_profit > 0).length;
+      const positionTotal = positionShowdownHands.length;
+      const positionWinRate = positionTotal > 0 ? (positionWins / positionTotal) * 100 : 0;
+
+      positionStats.push({
+        position: position,
+        raisePct: positionWinRate,  // Use raisePct to store win rate for consistency
+        betPct: 0,
+        callPct: 0,
+        checkPct: 0,
+        foldPct: 0,
+        totalHands: positionTotal
+      });
+    });
+
+    return {
+      stage: 'showdown',
+      positions: positionStats
+    };
+  }
+
+  /**
+   * Calculate action statistics for a specific position (or overall if position is null)
+   */
+  private calculatePositionActionStats(hands: PokerHand[], stage: string, position: PokerPosition | null): ActionAnalysisPositionStats {
+    // Filter hands by position if specified
+    const filteredHands = position 
+      ? hands.filter(hand => hand.hero_position === position)
+      : hands;
+
+    // Filter hands that actually reached this stage AND have actions on this stage
+    const stageHands = filteredHands.filter(hand => {
+      if (!this.handReachedStage(hand, stage)) {
+        return false;
+      }
+      // Only include hands that have actual actions on this stage
+      const lastAction = this.getLastActionForStage(hand, stage);
+      return lastAction !== null;
+    });
+
+    // Extract last action for each hand on this stage
+    const actionCounts = { R: 0, B: 0, C: 0, X: 0, F: 0 };
+    
+    stageHands.forEach(hand => {
+      const lastAction = this.getLastActionForStage(hand, stage);
+      if (lastAction && actionCounts.hasOwnProperty(lastAction)) {
+        actionCounts[lastAction as keyof typeof actionCounts]++;
+      }
+    });
+
+    const totalValidActionHands = stageHands.length;
+    
+    return {
+      position: position || 'Overall',
+      raisePct: totalValidActionHands > 0 ? roundToDecimals((actionCounts.R / totalValidActionHands) * 100, 1) : 0,
+      betPct: totalValidActionHands > 0 ? roundToDecimals((actionCounts.B / totalValidActionHands) * 100, 1) : 0,
+      callPct: totalValidActionHands > 0 ? roundToDecimals((actionCounts.C / totalValidActionHands) * 100, 1) : 0,
+      checkPct: totalValidActionHands > 0 ? roundToDecimals((actionCounts.X / totalValidActionHands) * 100, 1) : 0,
+      foldPct: totalValidActionHands > 0 ? roundToDecimals((actionCounts.F / totalValidActionHands) * 100, 1) : 0,
+      totalHands: totalValidActionHands
+    };
+  }
+
+  /**
+   * Check if a hand reached a specific stage
+   */
+  private handReachedStage(hand: PokerHand, stage: string): boolean {
+    const stageOrder = ['preflop', 'flop', 'turn', 'river', 'showdown'];
+    const targetStageIndex = stageOrder.indexOf(stage);
+    const handFinalStageIndex = stageOrder.indexOf(hand.final_stage);
+    
+    return handFinalStageIndex >= targetStageIndex;
+  }
+
+  /**
+   * Get the last action for a specific stage from the hero's actions
+   */
+  private getLastActionForStage(hand: PokerHand, stage: string): string | null {
+    let actions: string;
+    
+    switch (stage) {
+      case 'preflop':
+        actions = hand.hero_preflop_actions;
+        break;
+      case 'flop':
+        actions = hand.hero_flop_actions;
+        break;
+      case 'turn':
+        actions = hand.hero_turn_actions;
+        break;
+      case 'river':
+        actions = hand.hero_river_actions;
+        break;
+      default:
+        return null;
+    }
+
+    // Return the last character (last action) if actions exist
+    return actions && actions.length > 0 ? actions.charAt(actions.length - 1) : null;
   }
 
   /**

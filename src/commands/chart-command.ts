@@ -10,6 +10,7 @@ interface ChartResults {
   profitResult: any;
   bb100Result: any;
   streetProfitResult: any;
+  actionAnalysisResult: any;
 }
 
 export class ChartCommand {
@@ -45,7 +46,8 @@ export class ChartCommand {
       // Calculate data and generate charts
       const chartData = this.calculateChartData(hands);
       const streetProfitData = this.chartCalculator.calculateStreetProfitAnalysisChartData(hands);
-      const chartResults = await this.generateCharts(chartData, streetProfitData);
+      const actionAnalysisData = this.chartCalculator.calculateActionAnalysisChartData(hands);
+      const chartResults = await this.generateCharts(chartData, streetProfitData, actionAnalysisData);
       const statistics = this.chartCalculator.getFinalStatistics(chartData.profitData, chartData.bb100Data);
 
       // Output results
@@ -96,9 +98,9 @@ export class ChartCommand {
   }
 
   /**
-   * Generate profit, BB/100 and street profit analysis charts
+   * Generate profit, BB/100, street profit analysis, and action analysis charts
    */
-  private async generateCharts(chartData: { profitData: any; bb100Data: any }, streetProfitData: any): Promise<ChartResults> {
+  private async generateCharts(chartData: { profitData: any; bb100Data: any }, streetProfitData: any, actionAnalysisData: any): Promise<ChartResults> {
     const interval = this.options.interval || CHARTS.DEFAULT_SAMPLING_INTERVAL;
     
     console.log(`${LOG_EMOJIS.CHART} Generating profit trend chart (interval: ${interval} hands)...`);
@@ -110,7 +112,10 @@ export class ChartCommand {
     console.log(`${LOG_EMOJIS.CHART} Generating Street Profit Analysis chart...`);
     const streetProfitResult = await this.chartGenerator.generateStreetProfitAnalysisChart(streetProfitData);
 
-    return { profitResult, bb100Result, streetProfitResult };
+    console.log(`${LOG_EMOJIS.CHART} Generating Action Analysis chart...`);
+    const actionAnalysisResult = await this.chartGenerator.generateActionAnalysisChart(actionAnalysisData);
+
+    return { profitResult, bb100Result, streetProfitResult, actionAnalysisResult };
   }
 
   /**
@@ -121,6 +126,7 @@ export class ChartCommand {
     console.log(`   - Profit chart: ${chartResults.profitResult.filePath}`);
     console.log(`   - BB/100 chart: ${chartResults.bb100Result.filePath}`);
     console.log(`   - Street Profit Analysis chart: ${chartResults.streetProfitResult.filePath}`);
+    console.log(`   - Action Analysis chart: ${chartResults.actionAnalysisResult.filePath}`);
     
     this.logStatistics(statistics);
   }

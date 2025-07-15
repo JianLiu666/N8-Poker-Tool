@@ -11,7 +11,10 @@ import {
   YAxisRange,
   CompleteStreetProfitChartData,
   StreetProfitAnalysisData,
-  StreetProfitPositionStats
+  StreetProfitPositionStats,
+  CompleteActionAnalysisChartData,
+  StreetActionAnalysisData,
+  ActionAnalysisPositionStats
 } from './chart-types';
 import { CHARTS, CHART_COLORS } from '../constants';
 import { formatTimestamp, ensureDirectoryExists } from '../utils';
@@ -19,7 +22,7 @@ import { formatTimestamp, ensureDirectoryExists } from '../utils';
 // Register Chart.js components
 Chart.register(...registerables, ChartDataLabels);
 
-type ChartType = 'profit' | 'bb100' | 'street-profit-analysis';
+type ChartType = 'profit' | 'bb100' | 'street-profit-analysis' | 'action-analysis';
 
 /**
  * Chart generator class responsible for creating visual charts from poker data
@@ -76,6 +79,23 @@ export class ChartGenerator {
     };
   }
 
+  /**
+   * Generate action analysis chart with 5 separate bar charts for action proportions
+   */
+  async generateActionAnalysisChart(data: CompleteActionAnalysisChartData): Promise<ChartGenerationResult> {
+    const config = this.createChartConfig('action-analysis');
+    const finalValues = this.extractActionAnalysisFinalValues(data);
+    
+    // Create 5 separate charts for each stage
+    const filePath = await this.renderActionAnalysisChart(data, config);
+    
+    return {
+      filePath,
+      totalHands: this.calculateTotalHandsFromActionAnalysis(data),
+      finalValues
+    };
+  }
+
   // ===== CHART CONFIGURATION METHODS =====
 
   /**
@@ -102,13 +122,19 @@ export class ChartGenerator {
         xAxisLabel: 'Position',
         yAxisLabel: 'Profit (BB)',
         fileName: `poker-street-profit-analysis-chart-${timestamp}`
+      },
+      'action-analysis': {
+        title: 'Poker Action Analysis',
+        xAxisLabel: 'Position',
+        yAxisLabel: 'Percentage (%)',
+        fileName: `poker-action-analysis-chart-${timestamp}`
       }
     };
 
     const baseConfig = configs[type];
     return {
       width: CHARTS.DEFAULT_WIDTH,
-      height: type === 'street-profit-analysis' ? CHARTS.DEFAULT_HEIGHT * 2 : CHARTS.DEFAULT_HEIGHT,
+      height: (type === 'street-profit-analysis' || type === 'action-analysis') ? CHARTS.DEFAULT_HEIGHT * 2 : CHARTS.DEFAULT_HEIGHT,
       ...baseConfig,
       fileName: `${baseConfig.fileName}${CHARTS.DEFAULT_FILE_EXTENSION}`
     };
@@ -829,6 +855,378 @@ export class ChartGenerator {
       chromaSubsampling: false
     });
     await fs.writeFile(filePath, buffer);
+  }
+
+  // ===== ACTION ANALYSIS HELPER METHODS =====
+
+  /**
+   * Render action analysis chart with 5 separate bar charts for each stage
+   */
+  private async renderActionAnalysisChart(
+    data: CompleteActionAnalysisChartData, 
+    config: ChartConfig
+  ): Promise<string> {
+    await ensureDirectoryExists(this.outputDir);
+
+    // Create a large canvas that will hold all 5 charts
+    const totalHeight = config.height;
+    const separatorMargin = 10; // Margin between charts and separators
+    const chartHeight = Math.floor((totalHeight - (4 * separatorMargin)) / 5); // 4 separators between 5 charts
+    const canvas = createCanvas(config.width, totalHeight);
+    const ctx = canvas.getContext('2d');
+
+    // Draw white background
+    ctx.fillStyle = CHARTS.BACKGROUND_COLOR;
+    ctx.fillRect(0, 0, config.width, totalHeight);
+
+    let currentY = 0;
+
+    // Define the stages in order
+    const stages = ['preflop', 'flop', 'turn', 'river', 'showdown'];
+    const stageLabels = {
+      'preflop': 'Preflop Action Analysis',
+      'flop': 'Flop Action Analysis', 
+      'turn': 'Turn Action Analysis',
+      'river': 'River Action Analysis',
+      'showdown': 'Showdown Win% Analysis'
+    };
+
+    for (const stage of stages) {
+      const stageData = data[stage as keyof CompleteActionAnalysisChartData];
+      if (stageData) {
+        await this.renderSingleActionAnalysisSection(
+          ctx,
+          stageData,
+          stageLabels[stage as keyof typeof stageLabels],
+          0,
+          currentY,
+          config.width,
+          chartHeight
+        );
+        currentY += chartHeight + separatorMargin;
+      }
+    }
+
+    const filePath = path.join(this.outputDir, config.fileName);
+    await this.saveChart(canvas, filePath);
+    return filePath;
+  }
+
+  /**
+   * Render a single action analysis chart section with percentage bars per position
+   */
+  private async renderSingleActionAnalysisSection(
+    ctx: any,
+    data: StreetActionAnalysisData,
+    title: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): Promise<void> {
+    // Save the current context state
+    ctx.save();
+    
+    // Set clipping region for this chart section
+    ctx.beginPath();
+    ctx.rect(x, y, width, height);
+    ctx.clip();
+    
+    // Translate to the chart section position
+    ctx.translate(x, y);
+    
+    // Draw section background
+    ctx.fillStyle = CHARTS.BACKGROUND_COLOR;
+    ctx.fillRect(0, 0, width, height);
+    
+    // Define chart margins and areas
+    const marginTop = 40;
+    const marginBottom = 60;
+    const marginLeft = 80;
+    const marginRight = 120; // Extra space for legend
+    
+    const chartAreaX = marginLeft;
+    const chartAreaY = marginTop;
+    const chartAreaWidth = width - marginLeft - marginRight;
+    const chartAreaHeight = height - marginTop - marginBottom;
+    
+    // Draw title
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(title, width / 2, 20);
+    
+    if (data.positions && data.positions.length > 0) {
+      // For showdown stage, use single bars for win rate
+      if (data.stage === 'showdown') {
+        this.drawShowdownWinRateBars(ctx, data, chartAreaX, chartAreaY, chartAreaWidth, chartAreaHeight, width);
+      } else {
+        // For other stages, draw stacked action bars
+        this.drawActionProportionBars(ctx, data, chartAreaX, chartAreaY, chartAreaWidth, chartAreaHeight, width);
+      }
+      
+      // Draw legend
+      this.drawActionLegend(ctx, width - marginRight + 10, chartAreaY, data.stage === 'showdown');
+    }
+    
+    // Restore the context state
+    ctx.restore();
+  }
+
+  /**
+   * Draw action proportion bars for preflop, flop, turn, river
+   */
+  private drawActionProportionBars(
+    ctx: any,
+    data: StreetActionAnalysisData,
+    chartAreaX: number,
+    chartAreaY: number,
+    chartAreaWidth: number,
+    chartAreaHeight: number,
+    totalWidth: number
+  ): void {
+    const positionCount = data.positions.length;
+    const groupWidth = chartAreaWidth / positionCount;
+    const barWidth = groupWidth * 0.7; // 70% of group width for the bar
+    
+    // Draw Y-axis grid and labels
+    this.drawPercentageYAxis(ctx, chartAreaX, chartAreaY, chartAreaWidth, chartAreaHeight);
+    
+    data.positions.forEach((position: ActionAnalysisPositionStats, index: number) => {
+      const barX = chartAreaX + index * groupWidth + (groupWidth - barWidth) / 2;
+      
+      // Draw stacked bar for actions (in order: Fold, Check, Call, Bet, Raise)
+      let currentY = chartAreaY + chartAreaHeight;
+      
+      // Fold (bottom)
+      if (position.foldPct > 0) {
+        const foldHeight = (position.foldPct / 100) * chartAreaHeight;
+        currentY -= foldHeight;
+        ctx.fillStyle = CHART_COLORS.ACTION_FOLD;
+        ctx.fillRect(barX, currentY, barWidth, foldHeight);
+        
+        // Add percentage label if significant
+        if (position.foldPct >= 5) {
+          ctx.fillStyle = '#000000';
+          ctx.font = '10px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText(`${position.foldPct.toFixed(1)}%`, barX + barWidth / 2, currentY + foldHeight / 2 + 3);
+        }
+      }
+      
+      // Check
+      if (position.checkPct > 0) {
+        const checkHeight = (position.checkPct / 100) * chartAreaHeight;
+        currentY -= checkHeight;
+        ctx.fillStyle = CHART_COLORS.ACTION_CHECK;
+        ctx.fillRect(barX, currentY, barWidth, checkHeight);
+        
+        if (position.checkPct >= 5) {
+          ctx.fillStyle = '#000000';
+          ctx.font = '10px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText(`${position.checkPct.toFixed(1)}%`, barX + barWidth / 2, currentY + checkHeight / 2 + 3);
+        }
+      }
+      
+      // Call
+      if (position.callPct > 0) {
+        const callHeight = (position.callPct / 100) * chartAreaHeight;
+        currentY -= callHeight;
+        ctx.fillStyle = CHART_COLORS.ACTION_CALL;
+        ctx.fillRect(barX, currentY, barWidth, callHeight);
+        
+        if (position.callPct >= 5) {
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = '10px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText(`${position.callPct.toFixed(1)}%`, barX + barWidth / 2, currentY + callHeight / 2 + 3);
+        }
+      }
+      
+      // Bet
+      if (position.betPct > 0) {
+        const betHeight = (position.betPct / 100) * chartAreaHeight;
+        currentY -= betHeight;
+        ctx.fillStyle = CHART_COLORS.ACTION_BET;
+        ctx.fillRect(barX, currentY, barWidth, betHeight);
+        
+        if (position.betPct >= 5) {
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = '10px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText(`${position.betPct.toFixed(1)}%`, barX + barWidth / 2, currentY + betHeight / 2 + 3);
+        }
+      }
+      
+      // Raise (top)
+      if (position.raisePct > 0) {
+        const raiseHeight = (position.raisePct / 100) * chartAreaHeight;
+        currentY -= raiseHeight;
+        ctx.fillStyle = CHART_COLORS.ACTION_RAISE;
+        ctx.fillRect(barX, currentY, barWidth, raiseHeight);
+        
+        if (position.raisePct >= 5) {
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = '10px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText(`${position.raisePct.toFixed(1)}%`, barX + barWidth / 2, currentY + raiseHeight / 2 + 3);
+        }
+      }
+      
+      // Draw position label
+      ctx.fillStyle = '#000000';
+      ctx.font = '12px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(position.position, barX + barWidth / 2, chartAreaY + chartAreaHeight + 20);
+      
+      // Draw hand count
+      ctx.font = '10px Arial';
+      ctx.fillText(`(${position.totalHands})`, barX + barWidth / 2, chartAreaY + chartAreaHeight + 35);
+    });
+  }
+
+  /**
+   * Draw showdown win rate bars
+   */
+  private drawShowdownWinRateBars(
+    ctx: any,
+    data: StreetActionAnalysisData,
+    chartAreaX: number,
+    chartAreaY: number,
+    chartAreaWidth: number,
+    chartAreaHeight: number,
+    totalWidth: number
+  ): void {
+    const positionCount = data.positions.length;
+    const groupWidth = chartAreaWidth / positionCount;
+    const barWidth = groupWidth * 0.7;
+    
+    // Draw Y-axis grid and labels
+    this.drawPercentageYAxis(ctx, chartAreaX, chartAreaY, chartAreaWidth, chartAreaHeight);
+    
+    data.positions.forEach((position: ActionAnalysisPositionStats, index: number) => {
+      const barX = chartAreaX + index * groupWidth + (groupWidth - barWidth) / 2;
+      const winRate = position.raisePct; // Win rate is stored in raisePct for showdown
+      const barHeight = (winRate / 100) * chartAreaHeight;
+      const barY = chartAreaY + chartAreaHeight - barHeight;
+      
+      // Draw win rate bar
+      ctx.fillStyle = CHART_COLORS.ACTION_WIN_RATE;
+      ctx.fillRect(barX, barY, barWidth, barHeight);
+      
+      // Draw percentage label
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = '11px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${winRate.toFixed(1)}%`, barX + barWidth / 2, barY + barHeight / 2 + 3);
+      
+      // Draw position label
+      ctx.fillStyle = '#000000';
+      ctx.font = '12px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(position.position, barX + barWidth / 2, chartAreaY + chartAreaHeight + 20);
+      
+      // Draw hand count
+      ctx.font = '10px Arial';
+      ctx.fillText(`(${position.totalHands})`, barX + barWidth / 2, chartAreaY + chartAreaHeight + 35);
+    });
+  }
+
+  /**
+   * Draw percentage Y-axis with grid lines
+   */
+  private drawPercentageYAxis(
+    ctx: any,
+    chartAreaX: number,
+    chartAreaY: number,
+    chartAreaWidth: number,
+    chartAreaHeight: number
+  ): void {
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#000000';
+    ctx.font = '10px Arial';
+    ctx.textAlign = 'right';
+    
+    // Draw percentage lines from 0% to 100%
+    for (let pct = 0; pct <= 100; pct += 20) {
+      const y = chartAreaY + chartAreaHeight * (1 - pct / 100);
+      
+      // Draw grid line
+      ctx.beginPath();
+      ctx.moveTo(chartAreaX, y);
+      ctx.lineTo(chartAreaX + chartAreaWidth, y);
+      ctx.stroke();
+      
+      // Draw label
+      ctx.fillText(`${pct}%`, chartAreaX - 5, y + 3);
+    }
+    
+    // Draw Y-axis line
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(chartAreaX, chartAreaY);
+    ctx.lineTo(chartAreaX, chartAreaY + chartAreaHeight);
+    ctx.stroke();
+  }
+
+  /**
+   * Draw action legend
+   */
+  private drawActionLegend(ctx: any, x: number, y: number, isShowdown: boolean): void {
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'left';
+    
+    if (isShowdown) {
+      // Legend for showdown win rate
+      ctx.fillStyle = CHART_COLORS.ACTION_WIN_RATE;
+      ctx.fillRect(x, y, 12, 12);
+      ctx.fillStyle = '#000000';
+      ctx.fillText('Win Rate', x + 18, y + 9);
+    } else {
+      // Legend for actions
+      const actions = [
+        { color: CHART_COLORS.ACTION_RAISE, label: 'Raise' },
+        { color: CHART_COLORS.ACTION_BET, label: 'Bet' },
+        { color: CHART_COLORS.ACTION_CALL, label: 'Call' },
+        { color: CHART_COLORS.ACTION_CHECK, label: 'Check' },
+        { color: CHART_COLORS.ACTION_FOLD, label: 'Fold' }
+      ];
+      
+      actions.forEach((action, index) => {
+        const legendY = y + index * 18;
+        ctx.fillStyle = action.color;
+        ctx.fillRect(x, legendY, 12, 12);
+        ctx.fillStyle = '#000000';
+        ctx.fillText(action.label, x + 18, legendY + 9);
+      });
+    }
+  }
+
+  /**
+   * Extract final values for action analysis chart
+   */
+  private extractActionAnalysisFinalValues(data: CompleteActionAnalysisChartData): Record<string, number> {
+    const finalValues: Record<string, number> = {};
+    
+    Object.entries(data).forEach(([stage, stageData]: [string, StreetActionAnalysisData]) => {
+      const stageTotalHands = stageData.positions.reduce((sum: number, pos: ActionAnalysisPositionStats) => sum + pos.totalHands, 0);
+      finalValues[`${stage.charAt(0).toUpperCase() + stage.slice(1)} (${stageTotalHands} hands)`] = stageTotalHands;
+    });
+    
+    return finalValues;
+  }
+
+  /**
+   * Calculate total hands from action analysis data
+   */
+  private calculateTotalHandsFromActionAnalysis(data: CompleteActionAnalysisChartData): number {
+    // Use preflop overall hands as the total since all hands start at preflop
+    const preflopData = data.preflop;
+    const overallPosition = preflopData.positions.find(pos => pos.position === 'Overall');
+    return overallPosition ? overallPosition.totalHands : 0;
   }
 
   // ===== UTILITY METHODS =====

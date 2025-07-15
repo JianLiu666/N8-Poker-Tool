@@ -181,6 +181,30 @@ export interface CompleteStreetProfitChartData {
   showdown: StreetProfitAnalysisData;
 }
 
+// Action Analysis types
+export interface ActionAnalysisPositionStats {
+  position: string;
+  raisePct: number;    // Percentage of hands where last action was Raise
+  betPct: number;      // Percentage of hands where last action was Bet
+  callPct: number;     // Percentage of hands where last action was Call
+  checkPct: number;    // Percentage of hands where last action was Check
+  foldPct: number;     // Percentage of hands where last action was Fold
+  totalHands: number;  // Total hands for this position
+}
+
+export interface StreetActionAnalysisData {
+  stage: string;
+  positions: ActionAnalysisPositionStats[];
+}
+
+export interface CompleteActionAnalysisChartData {
+  preflop: StreetActionAnalysisData;
+  flop: StreetActionAnalysisData;
+  turn: StreetActionAnalysisData;
+  river: StreetActionAnalysisData;
+  showdown: StreetActionAnalysisData; // For showdown win% instead of actions
+}
+
 // ================== Parsing Result Interfaces ==================
 
 export interface ParseHandResult {

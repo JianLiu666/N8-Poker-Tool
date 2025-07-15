@@ -183,6 +183,7 @@ export interface FinalStagePositionStats {
   position: string;
   profit: number;  // Total profit when hero_profit > 0
   loss: number;    // Total loss when hero_profit <= 0
+  totalPnL: number; // Total profit + loss (net result)
   profitCount: number;  // Number of profitable hands
   lossCount: number;    // Number of losing hands
 }

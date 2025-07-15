@@ -142,10 +142,13 @@ export class ChartCalculator {
         : 0.10; // Default to $0.10 if no hands
 
       // Add Overall statistics first
+      const overallProfitBB = roundToDecimals(totalOverallProfit / avgBigBlind, 2);
+      const overallLossBB = roundToDecimals(totalOverallLoss / avgBigBlind, 2);
       positionStats.push({
         position: 'Overall',
-        profit: roundToDecimals(totalOverallProfit / avgBigBlind, 2),
-        loss: roundToDecimals(totalOverallLoss / avgBigBlind, 2),
+        profit: overallProfitBB,
+        loss: overallLossBB,
+        totalPnL: roundToDecimals(overallProfitBB + overallLossBB, 2),
         profitCount: allProfitHands.length,
         lossCount: allLossHands.length
       });
@@ -159,10 +162,13 @@ export class ChartCalculator {
         const totalProfit = profitHands.reduce((sum, hand) => sum + hand.hero_profit, 0);
         const totalLoss = lossHands.reduce((sum, hand) => sum + hand.hero_profit, 0);
 
+        const positionProfitBB = roundToDecimals(totalProfit / avgBigBlind, 2);
+        const positionLossBB = roundToDecimals(totalLoss / avgBigBlind, 2);
         positionStats.push({
           position: position,
-          profit: roundToDecimals(totalProfit / avgBigBlind, 2),
-          loss: roundToDecimals(totalLoss / avgBigBlind, 2),
+          profit: positionProfitBB,
+          loss: positionLossBB,
+          totalPnL: roundToDecimals(positionProfitBB + positionLossBB, 2),
           profitCount: profitHands.length,
           lossCount: lossHands.length
         });

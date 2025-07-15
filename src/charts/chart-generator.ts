@@ -768,22 +768,28 @@ export class ChartGenerator {
       ctx.lineTo(chartAreaX + chartAreaWidth, zeroY);
       ctx.stroke();
       
-      // Calculate bar dimensions - 2 bars per position
+      // Calculate bar dimensions - 3 bars per position (profit, total P&L, loss)
       const positionCount = data.positions.length;
       const groupWidth = chartAreaWidth / positionCount;
-      const barWidth = groupWidth * 0.35; // Each bar takes 35% of group width
-      const barSpacing = groupWidth * 0.15; // 15% spacing between bars in a group
+      const barWidth = groupWidth * 0.25; // Each bar takes 25% of group width
+      const barSpacing = groupWidth * 0.08; // 8% spacing between bars in a group
       
       // Calculate gradient intensity based on value magnitude
       const maxProfit = Math.max(...data.positions.map(p => p.profit));
       const maxLoss = Math.min(...data.positions.map(p => p.loss));
+      const maxAbsTotalPnL = Math.max(...data.positions.map(p => Math.abs(p.totalPnL)));
       
       // Draw bars and labels for each position
       data.positions.forEach((position, index) => {
         const groupX = chartAreaX + index * groupWidth;
         const centerX = groupX + groupWidth / 2;
         
-        // Draw profit bar (green)
+        // Bar positions: profit (left), total P&L (center), loss (right)
+        const profitBarX = centerX - barWidth - barSpacing;
+        const totalPnLBarX = centerX - barWidth / 2;
+        const lossBarX = centerX + barSpacing;
+        
+        // Draw profit bar (green) - left position
         if (position.profit > 0) {
           const profitBarHeight = (position.profit / valueRange) * chartAreaHeight * 0.8;
           const profitBarY = zeroY - profitBarHeight;
@@ -793,17 +799,40 @@ export class ChartGenerator {
           const profitIntensity = 0.3 + (profitRatio * 0.5); // 0.3 to 0.8
           
           ctx.fillStyle = `rgba(34, 197, 94, ${profitIntensity})`;
-          ctx.fillRect(centerX - barWidth - barSpacing / 2, profitBarY, barWidth, profitBarHeight);
+          ctx.fillRect(profitBarX, profitBarY, barWidth, profitBarHeight);
           
           // Draw profit value label
           ctx.fillStyle = '#000000';
-          ctx.font = '9px Arial';
+          ctx.font = '8px Arial';
           ctx.textAlign = 'center';
-          const profitLabel = `+${position.profit.toFixed(2)}`;
-          ctx.fillText(profitLabel, centerX - barWidth / 2 - barSpacing / 2, profitBarY - 5);
+          const profitLabel = `+${position.profit.toFixed(1)}`;
+          ctx.fillText(profitLabel, profitBarX + barWidth / 2, profitBarY - 3);
         }
         
-        // Draw loss bar (red)
+        // Draw total P&L bar (center position) - green if positive, red if negative
+        if (position.totalPnL !== 0) {
+          const isPositive = position.totalPnL > 0;
+          const totalPnLBarHeight = Math.abs(position.totalPnL) / valueRange * chartAreaHeight * 0.8;
+          const totalPnLBarY = isPositive ? zeroY - totalPnLBarHeight : zeroY;
+          
+          // Calculate gradient intensity for total P&L
+          const totalPnLRatio = maxAbsTotalPnL > 0 ? Math.abs(position.totalPnL) / maxAbsTotalPnL : 0;
+          const totalPnLIntensity = 0.4 + (totalPnLRatio * 0.4); // 0.4 to 0.8
+          
+          const color = isPositive ? `rgba(34, 197, 94, ${totalPnLIntensity})` : `rgba(239, 68, 68, ${totalPnLIntensity})`;
+          ctx.fillStyle = color;
+          ctx.fillRect(totalPnLBarX, totalPnLBarY, barWidth, totalPnLBarHeight);
+          
+          // Draw total P&L value label
+          ctx.fillStyle = '#000000';
+          ctx.font = 'bold 8px Arial';
+          ctx.textAlign = 'center';
+          const totalPnLLabel = isPositive ? `+${position.totalPnL.toFixed(1)}` : position.totalPnL.toFixed(1);
+          const labelY = isPositive ? totalPnLBarY - 3 : totalPnLBarY + totalPnLBarHeight + 10;
+          ctx.fillText(totalPnLLabel, totalPnLBarX + barWidth / 2, labelY);
+        }
+        
+        // Draw loss bar (red) - right position
         if (position.loss < 0) {
           const lossBarHeight = Math.abs(position.loss) / valueRange * chartAreaHeight * 0.8;
           const lossBarY = zeroY;
@@ -813,14 +842,14 @@ export class ChartGenerator {
           const lossIntensity = 0.3 + (lossRatio * 0.5); // 0.3 to 0.8
           
           ctx.fillStyle = `rgba(239, 68, 68, ${lossIntensity})`;
-          ctx.fillRect(centerX + barSpacing / 2, lossBarY, barWidth, lossBarHeight);
+          ctx.fillRect(lossBarX, lossBarY, barWidth, lossBarHeight);
           
           // Draw loss value label
           ctx.fillStyle = '#000000';
-          ctx.font = '9px Arial';
+          ctx.font = '8px Arial';
           ctx.textAlign = 'center';
-          const lossLabel = position.loss.toFixed(2);
-          ctx.fillText(lossLabel, centerX + barWidth / 2 + barSpacing / 2, lossBarY + lossBarHeight + 12);
+          const lossLabel = position.loss.toFixed(1);
+          ctx.fillText(lossLabel, lossBarX + barWidth / 2, lossBarY + lossBarHeight + 10);
         }
         
         // Draw position label

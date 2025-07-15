@@ -156,30 +156,10 @@ export interface FinalStatistics {
   statistics: StatisticsData;
 }
 
-// Street-based profit statistics for bar chart visualization
-export interface StreetProfitStats {
-  category: string;
-  totalProfit: number;
-  handCount: number;
-}
 
-export interface StreetProfitBarData {
-  dataPoints: StreetProfitStats[];
-}
 
-// Position-based profit statistics for composite bar chart visualization
-export interface PositionStreetProfitStats {
-  position: string;
-  dataPoints: StreetProfitStats[];
-}
-
-export interface CompositePositionChartData {
-  overall: StreetProfitBarData;
-  byPosition: PositionStreetProfitStats[];
-}
-
-// Final stage-based profit statistics for position analysis
-export interface FinalStagePositionStats {
+// Street-based profit statistics for position analysis
+export interface StreetProfitPositionStats {
   position: string;
   profit: number;  // Total profit when hero_profit > 0
   loss: number;    // Total loss when hero_profit <= 0
@@ -188,17 +168,17 @@ export interface FinalStagePositionStats {
   lossCount: number;    // Number of losing hands
 }
 
-export interface FinalStageChartData {
+export interface StreetProfitAnalysisData {
   stage: string;
-  positions: FinalStagePositionStats[];
+  positions: StreetProfitPositionStats[];
 }
 
-export interface CompleteFinalStageChartData {
-  preflop: FinalStageChartData;
-  flop: FinalStageChartData;
-  turn: FinalStageChartData;
-  river: FinalStageChartData;
-  showdown: FinalStageChartData;
+export interface CompleteStreetProfitChartData {
+  preflop: StreetProfitAnalysisData;
+  flop: StreetProfitAnalysisData;
+  turn: StreetProfitAnalysisData;
+  river: StreetProfitAnalysisData;
+  showdown: StreetProfitAnalysisData;
 }
 
 // ================== Parsing Result Interfaces ==================

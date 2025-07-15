@@ -5,13 +5,9 @@ import {
   BB100ChartData, 
   FinalStatistics,
   StatisticsData,
-  StreetProfitStats,
-  StreetProfitBarData,
-  PositionStreetProfitStats,
-  CompositePositionChartData,
-  FinalStagePositionStats,
-  FinalStageChartData,
-  CompleteFinalStageChartData
+  StreetProfitPositionStats,
+  StreetProfitAnalysisData,
+  CompleteStreetProfitChartData
 } from './chart-types';
 import { CHARTS } from '../constants';
 import { roundToDecimals, isShowdownResult } from '../utils';
@@ -24,19 +20,7 @@ export class ChartCalculator {
   
   // ===== CONSTANTS =====
   
-  // Constants for categorizing poker hands by street and result
-  private static readonly STREET_CATEGORIES = [
-    { street: 'preflop', result: 'win', label: 'Preflop Win' },
-    { street: 'preflop', result: 'loss', label: 'Preflop Loss' },
-    { street: 'flop', result: 'win', label: 'Flop Win' },
-    { street: 'flop', result: 'loss', label: 'Flop Loss' },
-    { street: 'turn', result: 'win', label: 'Turn Win' },
-    { street: 'turn', result: 'loss', label: 'Turn Loss' },
-    { street: 'river', result: 'win', label: 'River Win' },
-    { street: 'river', result: 'loss', label: 'River Loss' },
-    { street: 'showdown', result: 'win', label: 'Showdown Win' },
-    { street: 'showdown', result: 'loss', label: 'Showdown Loss' }
-  ] as const;
+
 
   // ===== PUBLIC CALCULATION METHODS =====
 
@@ -54,66 +38,14 @@ export class ChartCalculator {
     return this.processBB100DataWithSmoothing(hands, smoothInterval);
   }
 
-  /**
-   * Calculate street-based profit statistics for bar chart visualization
-   * Used internally by composite position chart
-   */
-  calculateStreetProfitData(hands: PokerHand[]): StreetProfitBarData {
-    const dataPoints: StreetProfitStats[] = [];
-    
-    // Use pre-defined categories for better performance and consistency
-    for (const category of ChartCalculator.STREET_CATEGORIES) {
-      const filteredHands = this.filterHandsByStreetAndResult(hands, category.street, category.result);
-      const totalProfit = this.calculateTotalProfit(filteredHands);
-      
-      dataPoints.push({
-        category: category.label,
-        totalProfit: roundToDecimals(totalProfit, 2),
-        handCount: filteredHands.length
-      });
-    }
-    
-    return { dataPoints };
-  }
+
+
+
 
   /**
-   * Calculate composite position-based chart data for all positions plus overall stats
+   * Calculate street profit analysis chart data for profit/loss analysis by position
    */
-  calculateCompositePositionChartData(hands: PokerHand[]): CompositePositionChartData {
-    // Calculate overall statistics (same as existing street profit data)
-    const overall = this.calculateStreetProfitData(hands);
-    
-    // Define the positions in the order we want them displayed
-    const positions = [
-      PokerPosition.UTG,
-      PokerPosition.HJ,
-      PokerPosition.CO,
-      PokerPosition.BTN,
-      PokerPosition.SB,
-      PokerPosition.BB
-    ];
-    
-    // Calculate statistics for each position
-    const byPosition: PositionStreetProfitStats[] = positions.map(position => {
-      const positionHands = hands.filter(hand => hand.hero_position === position);
-      const positionData = this.calculateStreetProfitData(positionHands);
-      
-      return {
-        position,
-        dataPoints: positionData.dataPoints
-      };
-    });
-    
-    return {
-      overall,
-      byPosition
-    };
-  }
-
-  /**
-   * Calculate final stage-based chart data for profit/loss analysis by position
-   */
-  calculateFinalStageChartData(hands: PokerHand[]): CompleteFinalStageChartData {
+  calculateStreetProfitAnalysisChartData(hands: PokerHand[]): CompleteStreetProfitChartData {
     const stages = ['preflop', 'flop', 'turn', 'river', 'showdown'];
     const positions = [
       PokerPosition.UTG,
@@ -128,7 +60,7 @@ export class ChartCalculator {
 
     stages.forEach(stage => {
       const stageHands = hands.filter(hand => hand.final_stage === stage);
-      const positionStats: FinalStagePositionStats[] = [];
+      const positionStats: StreetProfitPositionStats[] = [];
 
       // Calculate overall statistics for this stage
       const allProfitHands = stageHands.filter(hand => hand.hero_profit > 0);
@@ -180,7 +112,7 @@ export class ChartCalculator {
       };
     });
 
-    return result as CompleteFinalStageChartData;
+    return result as CompleteStreetProfitChartData;
   }
 
   /**
@@ -494,22 +426,7 @@ export class ChartCalculator {
 
   // ===== UTILITY METHODS =====
 
-  /**
-   * Filter hands by street and result
-   */
-  private filterHandsByStreetAndResult(hands: PokerHand[], street: string, result: string): PokerHand[] {
-    return hands.filter(hand => {
-      // Match street
-      if (hand.final_stage !== street) return false;
-      
-      // Match result (win/loss)
-      if (result === 'win') {
-        return hand.hero_hand_result === 'showdown_win' || hand.hero_hand_result === 'no_showdown_win';
-      } else {
-        return hand.hero_hand_result === 'showdown_loss' || hand.hero_hand_result === 'no_showdown_loss';
-      }
-    });
-  }
+
 
   /**
    * Calculate total profit for a filtered set of hands

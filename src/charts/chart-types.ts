@@ -9,11 +9,7 @@ export {
   YAxisRange,
   StatisticsData,
   FinalStatistics,
-  StreetProfitStats,
-  StreetProfitBarData,
-  PositionStreetProfitStats,
-  CompositePositionChartData,
-  FinalStagePositionStats,
-  FinalStageChartData,
-  CompleteFinalStageChartData
+  StreetProfitPositionStats,
+  StreetProfitAnalysisData,
+  CompleteStreetProfitChartData
 } from '../types'; 

@@ -9,8 +9,7 @@ import { createError } from '../utils';
 interface ChartResults {
   profitResult: any;
   bb100Result: any;
-  compositePositionResult: any;
-  finalStageResult: any;
+  streetProfitResult: any;
 }
 
 export class ChartCommand {
@@ -45,9 +44,8 @@ export class ChartCommand {
 
       // Calculate data and generate charts
       const chartData = this.calculateChartData(hands);
-      const compositePositionData = this.chartCalculator.calculateCompositePositionChartData(hands);
-      const finalStageData = this.chartCalculator.calculateFinalStageChartData(hands);
-      const chartResults = await this.generateCharts(chartData, compositePositionData, finalStageData);
+      const streetProfitData = this.chartCalculator.calculateStreetProfitAnalysisChartData(hands);
+      const chartResults = await this.generateCharts(chartData, streetProfitData);
       const statistics = this.chartCalculator.getFinalStatistics(chartData.profitData, chartData.bb100Data);
 
       // Output results
@@ -98,9 +96,9 @@ export class ChartCommand {
   }
 
   /**
-   * Generate profit, BB/100, composite position and final stage charts
+   * Generate profit, BB/100 and street profit analysis charts
    */
-  private async generateCharts(chartData: { profitData: any; bb100Data: any }, compositePositionData: any, finalStageData: any): Promise<ChartResults> {
+  private async generateCharts(chartData: { profitData: any; bb100Data: any }, streetProfitData: any): Promise<ChartResults> {
     const interval = this.options.interval || CHARTS.DEFAULT_SAMPLING_INTERVAL;
     
     console.log(`${LOG_EMOJIS.CHART} Generating profit trend chart (interval: ${interval} hands)...`);
@@ -109,13 +107,10 @@ export class ChartCommand {
     console.log(`${LOG_EMOJIS.CHART} Generating BB/100 trend chart (interval: ${interval} hands)...`);
     const bb100Result = await this.chartGenerator.generateBB100Chart(chartData.bb100Data);
 
-    console.log(`${LOG_EMOJIS.CHART} Generating Composite Position chart...`);
-    const compositePositionResult = await this.chartGenerator.generateCompositePositionChart(compositePositionData);
+    console.log(`${LOG_EMOJIS.CHART} Generating Street Profit Analysis chart...`);
+    const streetProfitResult = await this.chartGenerator.generateStreetProfitAnalysisChart(streetProfitData);
 
-    console.log(`${LOG_EMOJIS.CHART} Generating Final Stage Position chart...`);
-    const finalStageResult = await this.chartGenerator.generateFinalStagePositionChart(finalStageData);
-
-    return { profitResult, bb100Result, compositePositionResult, finalStageResult };
+    return { profitResult, bb100Result, streetProfitResult };
   }
 
   /**
@@ -125,8 +120,7 @@ export class ChartCommand {
     console.log(`${LOG_EMOJIS.CHART} Charts generated successfully:`);
     console.log(`   - Profit chart: ${chartResults.profitResult.filePath}`);
     console.log(`   - BB/100 chart: ${chartResults.bb100Result.filePath}`);
-    console.log(`   - Composite Position chart: ${chartResults.compositePositionResult.filePath}`);
-    console.log(`   - Final Stage Position chart: ${chartResults.finalStageResult.filePath}`);
+    console.log(`   - Street Profit Analysis chart: ${chartResults.streetProfitResult.filePath}`);
     
     this.logStatistics(statistics);
   }
@@ -151,7 +145,6 @@ export class ChartCommand {
       console.log(`   - BB/100 no-showdown: ${stats.bb100NoShowdown.toFixed(2)}`);
     }
     
-    console.log(`${LOG_EMOJIS.INFO} Composite Position chart created with detailed profit analysis for each position`);
-    console.log(`${LOG_EMOJIS.INFO} Final Stage Position chart created with 5 separate bar charts showing profit/loss by position for each stage`);
+    console.log(`${LOG_EMOJIS.INFO} Street Profit Analysis chart created with 5 separate bar charts showing profit/loss by position for each stage`);
   }
 } 

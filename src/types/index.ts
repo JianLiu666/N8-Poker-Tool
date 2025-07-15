@@ -178,6 +178,28 @@ export interface CompositePositionChartData {
   byPosition: PositionStreetProfitStats[];
 }
 
+// Final stage-based profit statistics for position analysis
+export interface FinalStagePositionStats {
+  position: string;
+  profit: number;  // Total profit when hero_profit > 0
+  loss: number;    // Total loss when hero_profit <= 0
+  profitCount: number;  // Number of profitable hands
+  lossCount: number;    // Number of losing hands
+}
+
+export interface FinalStageChartData {
+  stage: string;
+  positions: FinalStagePositionStats[];
+}
+
+export interface CompleteFinalStageChartData {
+  preflop: FinalStageChartData;
+  flop: FinalStageChartData;
+  turn: FinalStageChartData;
+  river: FinalStageChartData;
+  showdown: FinalStageChartData;
+}
+
 // ================== Parsing Result Interfaces ==================
 
 export interface ParseHandResult {

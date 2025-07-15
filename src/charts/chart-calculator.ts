@@ -8,7 +8,10 @@ import {
   StreetProfitStats,
   StreetProfitBarData,
   PositionStreetProfitStats,
-  CompositePositionChartData
+  CompositePositionChartData,
+  FinalStagePositionStats,
+  FinalStageChartData,
+  CompleteFinalStageChartData
 } from './chart-types';
 import { CHARTS } from '../constants';
 import { roundToDecimals, isShowdownResult } from '../utils';
@@ -105,6 +108,73 @@ export class ChartCalculator {
       overall,
       byPosition
     };
+  }
+
+  /**
+   * Calculate final stage-based chart data for profit/loss analysis by position
+   */
+  calculateFinalStageChartData(hands: PokerHand[]): CompleteFinalStageChartData {
+    const stages = ['preflop', 'flop', 'turn', 'river', 'showdown'];
+    const positions = [
+      PokerPosition.UTG,
+      PokerPosition.HJ,
+      PokerPosition.CO,
+      PokerPosition.BTN,
+      PokerPosition.SB,
+      PokerPosition.BB
+    ];
+
+    const result: any = {};
+
+    stages.forEach(stage => {
+      const stageHands = hands.filter(hand => hand.final_stage === stage);
+      const positionStats: FinalStagePositionStats[] = [];
+
+      // Calculate overall statistics for this stage
+      const allProfitHands = stageHands.filter(hand => hand.hero_profit > 0);
+      const allLossHands = stageHands.filter(hand => hand.hero_profit <= 0);
+      const totalOverallProfit = allProfitHands.reduce((sum, hand) => sum + hand.hero_profit, 0);
+      const totalOverallLoss = allLossHands.reduce((sum, hand) => sum + hand.hero_profit, 0);
+
+      // Use average BB from all stage hands for conversion
+      const avgBigBlind = stageHands.length > 0 
+        ? stageHands.reduce((sum, hand) => sum + hand.big_blind, 0) / stageHands.length 
+        : 0.10; // Default to $0.10 if no hands
+
+      // Add Overall statistics first
+      positionStats.push({
+        position: 'Overall',
+        profit: roundToDecimals(totalOverallProfit / avgBigBlind, 2),
+        loss: roundToDecimals(totalOverallLoss / avgBigBlind, 2),
+        profitCount: allProfitHands.length,
+        lossCount: allLossHands.length
+      });
+
+      // Then add individual position statistics
+      positions.forEach(position => {
+        const positionHands = stageHands.filter(hand => hand.hero_position === position);
+        const profitHands = positionHands.filter(hand => hand.hero_profit > 0);
+        const lossHands = positionHands.filter(hand => hand.hero_profit <= 0);
+
+        const totalProfit = profitHands.reduce((sum, hand) => sum + hand.hero_profit, 0);
+        const totalLoss = lossHands.reduce((sum, hand) => sum + hand.hero_profit, 0);
+
+        positionStats.push({
+          position: position,
+          profit: roundToDecimals(totalProfit / avgBigBlind, 2),
+          loss: roundToDecimals(totalLoss / avgBigBlind, 2),
+          profitCount: profitHands.length,
+          lossCount: lossHands.length
+        });
+      });
+
+      result[stage] = {
+        stage: stage,
+        positions: positionStats
+      };
+    });
+
+    return result as CompleteFinalStageChartData;
   }
 
   /**

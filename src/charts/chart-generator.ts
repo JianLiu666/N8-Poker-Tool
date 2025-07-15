@@ -12,6 +12,9 @@ import {
   CompositePositionChartData,
   PositionStreetProfitStats,
   StreetProfitBarData,
+  CompleteFinalStageChartData,
+  FinalStageChartData,
+  FinalStagePositionStats
 } from './chart-types';
 import { CHARTS, CHART_COLORS } from '../constants';
 import { formatTimestamp, ensureDirectoryExists } from '../utils';
@@ -19,7 +22,7 @@ import { formatTimestamp, ensureDirectoryExists } from '../utils';
 // Register Chart.js components
 Chart.register(...registerables, ChartDataLabels);
 
-type ChartType = 'profit' | 'bb100' | 'composite-position';
+type ChartType = 'profit' | 'bb100' | 'composite-position' | 'final-stage-position';
 
 /**
  * Chart generator class responsible for creating visual charts from poker data
@@ -74,6 +77,23 @@ export class ChartGenerator {
     };
   }
 
+  /**
+   * Generate final stage position profit/loss chart with 5 separate bar charts
+   */
+  async generateFinalStagePositionChart(data: CompleteFinalStageChartData): Promise<ChartGenerationResult> {
+    const config = this.createChartConfig('final-stage-position');
+    const finalValues = this.extractFinalStageFinalValues(data);
+    
+    // Create 5 separate charts for each stage
+    const filePath = await this.renderFinalStageChart(data, config);
+    
+    return {
+      filePath,
+      totalHands: this.calculateTotalHandsFromFinalStage(data),
+      finalValues
+    };
+  }
+
   // ===== CHART CONFIGURATION METHODS =====
 
   /**
@@ -99,13 +119,19 @@ export class ChartGenerator {
         xAxisLabel: 'Position',
         yAxisLabel: 'Cumulative Profit',
         fileName: `poker-composite-position-chart-${timestamp}`
+      },
+      'final-stage-position': {
+        title: 'Poker Final Stage Position Analysis',
+        xAxisLabel: 'Position',
+        yAxisLabel: 'Profit (BB)',
+        fileName: `poker-final-stage-position-chart-${timestamp}`
       }
     };
 
     const baseConfig = configs[type];
     return {
       width: CHARTS.DEFAULT_WIDTH,
-      height: type === 'composite-position' ? CHARTS.DEFAULT_HEIGHT * 2 : CHARTS.DEFAULT_HEIGHT,
+      height: (type === 'composite-position' || type === 'final-stage-position') ? CHARTS.DEFAULT_HEIGHT * 2 : CHARTS.DEFAULT_HEIGHT,
       ...baseConfig,
       fileName: `${baseConfig.fileName}${CHARTS.DEFAULT_FILE_EXTENSION}`
     };
@@ -287,6 +313,34 @@ export class ChartGenerator {
   }
 
   /**
+   * Calculate total hands from final stage data
+   */
+  private calculateTotalHandsFromFinalStage(data: CompleteFinalStageChartData): number {
+    let totalHands = 0;
+    Object.values(data).forEach((stageData: FinalStageChartData) => {
+      stageData.positions.forEach((pos: FinalStagePositionStats) => {
+        totalHands += pos.profitCount + pos.lossCount;
+      });
+    });
+    return totalHands;
+  }
+
+  /**
+   * Extract final values for final stage chart
+   */
+  private extractFinalStageFinalValues(data: CompleteFinalStageChartData): Record<string, number> {
+    const finalValues: Record<string, number> = {};
+    
+    Object.entries(data).forEach(([stage, stageData]: [string, FinalStageChartData]) => {
+      const stageProfit = stageData.positions.reduce((sum: number, pos: FinalStagePositionStats) => sum + pos.profit + pos.loss, 0);
+      const stageHands = stageData.positions.reduce((sum: number, pos: FinalStagePositionStats) => sum + pos.profitCount + pos.lossCount, 0);
+      finalValues[`${stage.charAt(0).toUpperCase() + stage.slice(1)} (${stageHands} hands)`] = stageProfit;
+    });
+    
+    return finalValues;
+  }
+
+  /**
    * Render composite chart with all positions in a single image
    */
   private async renderCompositeChart(
@@ -341,6 +395,77 @@ export class ChartGenerator {
       
       // Add separator line between charts (except after the last chart)
       if (i < chartsToRender.length - 1) {
+        currentY += separatorMargin / 2; // Add margin before separator
+        
+        ctx.strokeStyle = 'rgba(50, 50, 50, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, currentY);
+        ctx.lineTo(config.width, currentY);
+        ctx.stroke();
+        
+        currentY += separatorMargin / 2; // Add margin after separator
+      }
+    }
+
+    // Save the composite chart
+    const filePath = path.join(this.outputDir, config.fileName);
+    await this.saveChart(canvas, filePath);
+
+    return filePath;
+  }
+
+  /**
+   * Render final stage chart with 5 separate bar charts for each stage
+   */
+  private async renderFinalStageChart(
+    data: CompleteFinalStageChartData, 
+    config: ChartConfig
+  ): Promise<string> {
+    await ensureDirectoryExists(this.outputDir);
+
+    // Create a large canvas that will hold all 5 charts
+    const totalHeight = config.height;
+    const separatorMargin = 10; // Margin between charts and separators
+    const chartHeight = Math.floor((totalHeight - (4 * separatorMargin)) / 5); // 4 separators between 5 charts
+    const canvas = createCanvas(config.width, totalHeight);
+    const ctx = canvas.getContext('2d');
+
+    // Draw white background
+    ctx.fillStyle = CHARTS.BACKGROUND_COLOR;
+    ctx.fillRect(0, 0, config.width, totalHeight);
+
+    let currentY = 0;
+
+    // Define the stages in order
+    const stages = ['preflop', 'flop', 'turn', 'river', 'showdown'];
+    const stageLabels = {
+      'preflop': 'Preflop Profit Analysis',
+      'flop': 'Flop Profit Analysis', 
+      'turn': 'Turn Profit Analysis',
+      'river': 'River Profit Analysis',
+      'showdown': 'Showdown Profit Analysis'
+    };
+
+    // Render each stage chart
+    for (let i = 0; i < stages.length; i++) {
+      const stage = stages[i];
+      const stageData = data[stage as keyof CompleteFinalStageChartData];
+      
+      await this.renderSingleFinalStageSection(
+        ctx, 
+        stageData, 
+        stageLabels[stage as keyof typeof stageLabels], 
+        0, 
+        currentY, 
+        config.width, 
+        chartHeight
+      );
+      
+      currentY += chartHeight;
+      
+      // Add separator line between charts (except after the last chart)
+      if (i < stages.length - 1) {
         currentY += separatorMargin / 2; // Add margin before separator
         
         ctx.strokeStyle = 'rgba(50, 50, 50, 0.3)';
@@ -574,6 +699,165 @@ export class ChartGenerator {
       ctx.restore();
       
       // X-axis title removed as requested
+    }
+    
+    // Restore context state
+    ctx.restore();
+  }
+
+  /**
+   * Render a single final stage chart section with profit/loss bars per position
+   */
+  private async renderSingleFinalStageSection(
+    ctx: any,
+    data: FinalStageChartData,
+    title: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): Promise<void> {
+    // Save the current context state
+    ctx.save();
+    
+    // Set clipping region for this chart section
+    ctx.beginPath();
+    ctx.rect(x, y, width, height);
+    ctx.clip();
+    
+    // Translate to the chart section position
+    ctx.translate(x, y);
+    
+    // Draw section background
+    ctx.fillStyle = CHARTS.BACKGROUND_COLOR;
+    ctx.fillRect(0, 0, width, height);
+    
+    // Define chart margins and areas
+    const marginTop = 40;
+    const marginBottom = 60;
+    const marginLeft = 80;
+    const marginRight = 30;
+    
+    const chartAreaX = marginLeft;
+    const chartAreaY = marginTop;
+    const chartAreaWidth = width - marginLeft - marginRight;
+    const chartAreaHeight = height - marginTop - marginBottom;
+    
+    // Draw title
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(title, width / 2, 20);
+    
+    if (data.positions && data.positions.length > 0) {
+      // Calculate the range for scaling - include both profit and loss values
+      const allValues = data.positions.flatMap(pos => [pos.profit, pos.loss]);
+      const minValue = Math.min(0, ...allValues);
+      const maxValue = Math.max(0, ...allValues);
+      const valueRange = maxValue - minValue || 1;
+      
+      // Draw Y-axis grid lines and labels
+      this.drawYAxisGrid(ctx, chartAreaX, chartAreaY, chartAreaWidth, chartAreaHeight, minValue, maxValue);
+      
+      // Draw zero baseline (horizontal line at y=0)
+      const zeroY = chartAreaY + chartAreaHeight * (1 - (-minValue / valueRange));
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(chartAreaX, zeroY);
+      ctx.lineTo(chartAreaX + chartAreaWidth, zeroY);
+      ctx.stroke();
+      
+      // Calculate bar dimensions - 2 bars per position
+      const positionCount = data.positions.length;
+      const groupWidth = chartAreaWidth / positionCount;
+      const barWidth = groupWidth * 0.35; // Each bar takes 35% of group width
+      const barSpacing = groupWidth * 0.15; // 15% spacing between bars in a group
+      
+      // Calculate gradient intensity based on value magnitude
+      const maxProfit = Math.max(...data.positions.map(p => p.profit));
+      const maxLoss = Math.min(...data.positions.map(p => p.loss));
+      
+      // Draw bars and labels for each position
+      data.positions.forEach((position, index) => {
+        const groupX = chartAreaX + index * groupWidth;
+        const centerX = groupX + groupWidth / 2;
+        
+        // Draw profit bar (green)
+        if (position.profit > 0) {
+          const profitBarHeight = (position.profit / valueRange) * chartAreaHeight * 0.8;
+          const profitBarY = zeroY - profitBarHeight;
+          
+          // Calculate gradient intensity for profit
+          const profitRatio = maxProfit > 0 ? position.profit / maxProfit : 0;
+          const profitIntensity = 0.3 + (profitRatio * 0.5); // 0.3 to 0.8
+          
+          ctx.fillStyle = `rgba(34, 197, 94, ${profitIntensity})`;
+          ctx.fillRect(centerX - barWidth - barSpacing / 2, profitBarY, barWidth, profitBarHeight);
+          
+          // Draw profit value label
+          ctx.fillStyle = '#000000';
+          ctx.font = '9px Arial';
+          ctx.textAlign = 'center';
+          const profitLabel = `+${position.profit.toFixed(2)}`;
+          ctx.fillText(profitLabel, centerX - barWidth / 2 - barSpacing / 2, profitBarY - 5);
+        }
+        
+        // Draw loss bar (red)
+        if (position.loss < 0) {
+          const lossBarHeight = Math.abs(position.loss) / valueRange * chartAreaHeight * 0.8;
+          const lossBarY = zeroY;
+          
+          // Calculate gradient intensity for loss
+          const lossRatio = maxLoss < 0 ? Math.abs(position.loss) / Math.abs(maxLoss) : 0;
+          const lossIntensity = 0.3 + (lossRatio * 0.5); // 0.3 to 0.8
+          
+          ctx.fillStyle = `rgba(239, 68, 68, ${lossIntensity})`;
+          ctx.fillRect(centerX + barSpacing / 2, lossBarY, barWidth, lossBarHeight);
+          
+          // Draw loss value label
+          ctx.fillStyle = '#000000';
+          ctx.font = '9px Arial';
+          ctx.textAlign = 'center';
+          const lossLabel = position.loss.toFixed(2);
+          ctx.fillText(lossLabel, centerX + barWidth / 2 + barSpacing / 2, lossBarY + lossBarHeight + 12);
+        }
+        
+        // Draw position label
+        ctx.fillStyle = '#000000';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(position.position, centerX, chartAreaY + chartAreaHeight + 20);
+        
+        // Draw vertical separator line between groups (except after the last group)
+        if (index < data.positions.length - 1) {
+          const separatorX = groupX + groupWidth;
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(separatorX, chartAreaY);
+          ctx.lineTo(separatorX, chartAreaY + chartAreaHeight);
+          ctx.stroke();
+        }
+        
+        // Draw group border for Overall group (first group)
+        if (index === 0) {
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.rect(groupX + 5, chartAreaY, groupWidth - 10, chartAreaHeight);
+          ctx.stroke();
+        }
+      });
+      
+      // Draw Y-axis label
+      ctx.save();
+      ctx.translate(15, chartAreaY + chartAreaHeight / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.font = 'bold 11px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('Profit (BB)', 0, 0);
+      ctx.restore();
     }
     
     // Restore context state

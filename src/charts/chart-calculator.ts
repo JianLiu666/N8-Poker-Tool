@@ -12,7 +12,7 @@ import {
   StreetActionAnalysisData,
   CompleteActionAnalysisChartData
 } from './chart-types';
-import { CHARTS } from '../constants';
+import { CHARTS, POKER } from '../constants';
 import { roundToDecimals, isShowdownResult } from '../utils';
 
 /**
@@ -49,19 +49,10 @@ export class ChartCalculator {
    * Calculate action analysis chart data for action proportion analysis by position
    */
   calculateActionAnalysisChartData(hands: PokerHand[]): CompleteActionAnalysisChartData {
-    const stages = ['preflop', 'flop', 'turn', 'river', 'showdown'];
-    const positions = [
-      PokerPosition.UTG,
-      PokerPosition.HJ,
-      PokerPosition.CO,
-      PokerPosition.BTN,
-      PokerPosition.SB,
-      PokerPosition.BB
-    ];
-
+    const positions = this.getAllPositions();
     const result: any = {};
 
-    stages.forEach(stage => {
+    POKER.STAGES.forEach(stage => {
       if (stage === 'showdown') {
         // For showdown, calculate win percentage instead of actions
         result[stage] = this.calculateShowdownWinRates(hands, positions);
@@ -78,19 +69,10 @@ export class ChartCalculator {
    * Calculate street profit analysis chart data for profit/loss analysis by position
    */
   calculateStreetProfitAnalysisChartData(hands: PokerHand[]): CompleteStreetProfitChartData {
-    const stages = ['preflop', 'flop', 'turn', 'river', 'showdown'];
-    const positions = [
-      PokerPosition.UTG,
-      PokerPosition.HJ,
-      PokerPosition.CO,
-      PokerPosition.BTN,
-      PokerPosition.SB,
-      PokerPosition.BB
-    ];
-
+    const positions = this.getAllPositions();
     const result: any = {};
 
-    stages.forEach(stage => {
+    POKER.STAGES.forEach(stage => {
       const stageHands = hands.filter(hand => hand.final_stage === stage);
       const positionStats: StreetProfitPositionStats[] = [];
 
@@ -265,9 +247,8 @@ export class ChartCalculator {
    * Check if a hand reached a specific stage
    */
   private handReachedStage(hand: PokerHand, stage: string): boolean {
-    const stageOrder = ['preflop', 'flop', 'turn', 'river', 'showdown'];
-    const targetStageIndex = stageOrder.indexOf(stage);
-    const handFinalStageIndex = stageOrder.indexOf(hand.final_stage);
+    const targetStageIndex = this.getStageIndex(stage);
+    const handFinalStageIndex = this.getStageIndex(hand.final_stage);
     
     return handFinalStageIndex >= targetStageIndex;
   }
@@ -609,6 +590,34 @@ export class ChartCalculator {
   }
 
   // ===== UTILITY METHODS =====
+
+  /**
+   * Get all poker positions in standard order
+   */
+  private getAllPositions(): PokerPosition[] {
+    return [
+      PokerPosition.UTG,
+      PokerPosition.HJ,
+      PokerPosition.CO,
+      PokerPosition.BTN,
+      PokerPosition.SB,
+      PokerPosition.BB
+    ];
+  }
+
+  /**
+   * Check if a stage is valid
+   */
+  private isValidStage(stage: string): boolean {
+    return POKER.STAGES.includes(stage as any);
+  }
+
+  /**
+   * Get stage order index
+   */
+  private getStageIndex(stage: string): number {
+    return POKER.STAGES.indexOf(stage as any);
+  }
 
 
 

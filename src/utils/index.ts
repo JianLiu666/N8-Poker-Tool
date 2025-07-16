@@ -102,12 +102,6 @@ export const isUniqueConstraintError = (error: Error): boolean => {
   return error.message.includes('UNIQUE constraint failed');
 };
 
-/**
- * Type guard to check if a value is defined (not null or undefined)
- */
-export const isDefined = <T>(value: T | null | undefined): value is T => {
-  return value !== null && value !== undefined;
-};
 
 // Re-export error handling utilities
 export * from './error-handler'; 

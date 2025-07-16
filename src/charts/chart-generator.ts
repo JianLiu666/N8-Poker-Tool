@@ -16,7 +16,7 @@ import {
   StreetActionAnalysisData,
   ActionAnalysisPositionStats
 } from './chart-types';
-import { CHARTS, CHART_COLORS } from '../constants';
+import { CHARTS, CHART_COLORS, CHART_LAYOUT, POKER } from '../constants';
 import { formatTimestamp, ensureDirectoryExists } from '../utils';
 
 // Register Chart.js components
@@ -258,7 +258,7 @@ export class ChartGenerator {
     Object.entries(data).forEach(([stage, stageData]: [string, StreetProfitAnalysisData]) => {
       const stageProfit = stageData.positions.reduce((sum: number, pos: StreetProfitPositionStats) => sum + pos.profit + pos.loss, 0);
       const stageHands = stageData.positions.reduce((sum: number, pos: StreetProfitPositionStats) => sum + pos.profitCount + pos.lossCount, 0);
-      finalValues[`${stage.charAt(0).toUpperCase() + stage.slice(1)} (${stageHands} hands)`] = stageProfit;
+      finalValues[`${this.capitalizeFirstLetter(stage)} (${stageHands} hands)`] = stageProfit;
     });
     
     return finalValues;
@@ -267,7 +267,7 @@ export class ChartGenerator {
 
 
   /**
-   * Render street profit chart with 5 separate bar charts for each stage
+   * Render street profit chart with separate bar charts for each stage
    */
   private async renderStreetProfitChart(
     data: CompleteStreetProfitChartData, 
@@ -275,58 +275,37 @@ export class ChartGenerator {
   ): Promise<string> {
     await ensureDirectoryExists(this.outputDir);
 
-    // Create a large canvas that will hold all 5 charts
-    const totalHeight = config.height;
-    const separatorMargin = 10; // Margin between charts and separators
-    const chartHeight = Math.floor((totalHeight - (4 * separatorMargin)) / 5); // 4 separators between 5 charts
-    const canvas = createCanvas(config.width, totalHeight);
+    const chartHeight = this.calculateStageChartHeight(config.height);
+    const canvas = createCanvas(config.width, config.height);
     const ctx = canvas.getContext('2d');
 
     // Draw white background
     ctx.fillStyle = CHARTS.BACKGROUND_COLOR;
-    ctx.fillRect(0, 0, config.width, totalHeight);
+    ctx.fillRect(0, 0, config.width, config.height);
 
     let currentY = 0;
-
-    // Define the stages in order
-    const stages = ['preflop', 'flop', 'turn', 'river', 'showdown'];
-    const stageLabels = {
-      'preflop': 'Preflop Profit Analysis',
-      'flop': 'Flop Profit Analysis', 
-      'turn': 'Turn Profit Analysis',
-      'river': 'River Profit Analysis',
-      'showdown': 'Showdown Profit Analysis'
-    };
+    const stageLabels = this.createStageLabels('Profit Analysis');
 
     // Render each stage chart
-    for (let i = 0; i < stages.length; i++) {
-      const stage = stages[i];
+    for (let i = 0; i < POKER.STAGES.length; i++) {
+      const stage = POKER.STAGES[i];
       const stageData = data[stage as keyof CompleteStreetProfitChartData];
       
-              await this.renderSingleStreetProfitSection(
-          ctx, 
-          stageData, 
-          stageLabels[stage as keyof typeof stageLabels], 
-          0, 
-          currentY, 
-          config.width, 
-          chartHeight
-        );
+      await this.renderStreetProfitSection(
+        ctx, 
+        stageData, 
+        stageLabels[stage], 
+        0, 
+        currentY, 
+        config.width, 
+        chartHeight
+      );
       
       currentY += chartHeight;
       
       // Add separator line between charts (except after the last chart)
-      if (i < stages.length - 1) {
-        currentY += separatorMargin / 2; // Add margin before separator
-        
-        ctx.strokeStyle = 'rgba(50, 50, 50, 0.3)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(0, currentY);
-        ctx.lineTo(config.width, currentY);
-        ctx.stroke();
-        
-        currentY += separatorMargin / 2; // Add margin after separator
+      if (i < POKER.STAGES.length - 1) {
+        currentY = this.drawSectionSeparator(ctx, currentY, config.width);
       }
     }
 
@@ -342,9 +321,25 @@ export class ChartGenerator {
 
 
   /**
-   * Render a single street profit chart section with profit/loss bars per position
+   * Draw section separator line
    */
-  private async renderSingleStreetProfitSection(
+  private drawSectionSeparator(ctx: any, currentY: number, width: number): number {
+    currentY += CHART_LAYOUT.SEPARATOR_MARGIN / 2;
+    
+    ctx.strokeStyle = 'rgba(50, 50, 50, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, currentY);
+    ctx.lineTo(width, currentY);
+    ctx.stroke();
+    
+    return currentY + CHART_LAYOUT.SEPARATOR_MARGIN / 2;
+  }
+
+  /**
+   * Render a street profit chart section with profit/loss bars per position
+   */
+  private async renderStreetProfitSection(
     ctx: any,
     data: StreetProfitAnalysisData,
     title: string,
@@ -369,15 +364,10 @@ export class ChartGenerator {
     ctx.fillRect(0, 0, width, height);
     
     // Define chart margins and areas
-    const marginTop = 40;
-    const marginBottom = 60;
-    const marginLeft = 80;
-    const marginRight = 30;
-    
-    const chartAreaX = marginLeft;
-    const chartAreaY = marginTop;
-    const chartAreaWidth = width - marginLeft - marginRight;
-    const chartAreaHeight = height - marginTop - marginBottom;
+    const chartAreaX = CHART_LAYOUT.MARGIN_LEFT;
+    const chartAreaY = CHART_LAYOUT.MARGIN_TOP;
+    const chartAreaWidth = width - CHART_LAYOUT.MARGIN_LEFT - CHART_LAYOUT.MARGIN_RIGHT;
+    const chartAreaHeight = height - CHART_LAYOUT.MARGIN_TOP - CHART_LAYOUT.MARGIN_BOTTOM;
     
     // Draw title
     ctx.fillStyle = '#000000';
@@ -407,8 +397,8 @@ export class ChartGenerator {
       // Calculate bar dimensions - 3 bars per position (profit, total P&L, loss)
       const positionCount = data.positions.length;
       const groupWidth = chartAreaWidth / positionCount;
-      const barWidth = groupWidth * 0.25; // Each bar takes 25% of group width
-      const barSpacing = groupWidth * 0.08; // 8% spacing between bars in a group
+      const barWidth = groupWidth * CHART_LAYOUT.BAR_GROUP_WIDTH_RATIO;
+      const barSpacing = groupWidth * CHART_LAYOUT.BAR_SPACING_RATIO;
       
               // Calculate gradient intensity based on value magnitude
         const maxProfit = Math.max(...data.positions.map((p: StreetProfitPositionStats) => p.profit));
@@ -431,10 +421,9 @@ export class ChartGenerator {
           const profitBarY = zeroY - profitBarHeight;
           
           // Calculate gradient intensity for profit
-          const profitRatio = maxProfit > 0 ? position.profit / maxProfit : 0;
-          const profitIntensity = 0.3 + (profitRatio * 0.5); // 0.3 to 0.8
+          const profitIntensity = this.calculateGradientIntensity(position.profit, maxProfit, CHART_LAYOUT.PROFIT_GRADIENT_RANGE);
           
-          ctx.fillStyle = `rgba(34, 197, 94, ${profitIntensity})`;
+          ctx.fillStyle = this.createGradientColor(CHART_COLORS.PROFIT_GREEN, profitIntensity);
           ctx.fillRect(profitBarX, profitBarY, barWidth, profitBarHeight);
           
           // Draw profit value label
@@ -452,10 +441,11 @@ export class ChartGenerator {
           const totalPnLBarY = isPositive ? zeroY - totalPnLBarHeight : zeroY;
           
           // Calculate gradient intensity for total P&L
-          const totalPnLRatio = maxAbsTotalPnL > 0 ? Math.abs(position.totalPnL) / maxAbsTotalPnL : 0;
-          const totalPnLIntensity = 0.4 + (totalPnLRatio * 0.4); // 0.4 to 0.8
+          const totalPnLIntensity = this.calculateGradientIntensity(position.totalPnL, maxAbsTotalPnL, CHART_LAYOUT.TOTAL_PNL_GRADIENT_RANGE);
           
-          const color = isPositive ? `rgba(34, 197, 94, ${totalPnLIntensity})` : `rgba(239, 68, 68, ${totalPnLIntensity})`;
+          const color = isPositive 
+            ? this.createGradientColor(CHART_COLORS.PROFIT_GREEN, totalPnLIntensity)
+            : this.createGradientColor(CHART_COLORS.LOSS_RED, totalPnLIntensity);
           ctx.fillStyle = color;
           ctx.fillRect(totalPnLBarX, totalPnLBarY, barWidth, totalPnLBarHeight);
           
@@ -474,10 +464,9 @@ export class ChartGenerator {
           const lossBarY = zeroY;
           
           // Calculate gradient intensity for loss
-          const lossRatio = maxLoss < 0 ? Math.abs(position.loss) / Math.abs(maxLoss) : 0;
-          const lossIntensity = 0.3 + (lossRatio * 0.5); // 0.3 to 0.8
+          const lossIntensity = this.calculateGradientIntensity(position.loss, maxLoss, CHART_LAYOUT.PROFIT_GRADIENT_RANGE);
           
-          ctx.fillStyle = `rgba(239, 68, 68, ${lossIntensity})`;
+          ctx.fillStyle = this.createGradientColor(CHART_COLORS.LOSS_RED, lossIntensity);
           ctx.fillRect(lossBarX, lossBarY, barWidth, lossBarHeight);
           
           // Draw loss value label
@@ -730,7 +719,7 @@ export class ChartGenerator {
   // ===== ACTION ANALYSIS HELPER METHODS =====
 
   /**
-   * Render action analysis chart with 5 separate bar charts for each stage
+   * Render action analysis chart with separate bar charts for each stage
    */
   private async renderActionAnalysisChart(
     data: CompleteActionAnalysisChartData, 
@@ -738,42 +727,30 @@ export class ChartGenerator {
   ): Promise<string> {
     await ensureDirectoryExists(this.outputDir);
 
-    // Create a large canvas that will hold all 5 charts
-    const totalHeight = config.height;
-    const separatorMargin = 10; // Margin between charts and separators
-    const chartHeight = Math.floor((totalHeight - (4 * separatorMargin)) / 5); // 4 separators between 5 charts
-    const canvas = createCanvas(config.width, totalHeight);
+    const chartHeight = this.calculateStageChartHeight(config.height);
+    const canvas = createCanvas(config.width, config.height);
     const ctx = canvas.getContext('2d');
 
     // Draw white background
     ctx.fillStyle = CHARTS.BACKGROUND_COLOR;
-    ctx.fillRect(0, 0, config.width, totalHeight);
+    ctx.fillRect(0, 0, config.width, config.height);
 
     let currentY = 0;
+    const stageLabels = this.createActionAnalysisStageLabels();
 
-    // Define the stages in order
-    const stages = ['preflop', 'flop', 'turn', 'river', 'showdown'];
-    const stageLabels = {
-      'preflop': 'Preflop Action Analysis',
-      'flop': 'Flop Action Analysis', 
-      'turn': 'Turn Action Analysis',
-      'river': 'River Action Analysis',
-      'showdown': 'Showdown Win% Analysis'
-    };
-
-    for (const stage of stages) {
+    for (const stage of POKER.STAGES) {
       const stageData = data[stage as keyof CompleteActionAnalysisChartData];
       if (stageData) {
-        await this.renderSingleActionAnalysisSection(
+        await this.renderActionAnalysisSection(
           ctx,
           stageData,
-          stageLabels[stage as keyof typeof stageLabels],
+          stageLabels[stage],
           0,
           currentY,
           config.width,
           chartHeight
         );
-        currentY += chartHeight + separatorMargin;
+        currentY += chartHeight + CHART_LAYOUT.SEPARATOR_MARGIN;
       }
     }
 
@@ -832,7 +809,7 @@ export class ChartGenerator {
     const sectionHeight = Math.floor((chartHeight - (4 * 10)) / 5); // 4 separators between 5 charts
 
     // Render left side - Action Analysis
-    await this.renderActionAnalysisSection(
+    await this.renderActionAnalysisColumnSections(
       ctx,
       actionData,
       0,
@@ -843,7 +820,7 @@ export class ChartGenerator {
     );
 
     // Render right side - Street Profit Analysis
-    await this.renderStreetProfitSection(
+    await this.renderStreetProfitColumnSections(
       ctx,
       profitData,
       rightStartX,
@@ -859,9 +836,9 @@ export class ChartGenerator {
   }
 
   /**
-   * Render all 5 action analysis sections in a column
+   * Render all action analysis sections in a column
    */
-  private async renderActionAnalysisSection(
+  private async renderActionAnalysisColumnSections(
     ctx: any,
     data: CompleteActionAnalysisChartData,
     x: number,
@@ -885,7 +862,7 @@ export class ChartGenerator {
     for (const stage of stages) {
       const stageData = data[stage as keyof CompleteActionAnalysisChartData];
       if (stageData) {
-        await this.renderSingleActionAnalysisSection(
+        await this.renderActionAnalysisSection(
           ctx,
           stageData,
           stageLabels[stage as keyof typeof stageLabels],
@@ -900,9 +877,9 @@ export class ChartGenerator {
   }
 
   /**
-   * Render all 5 street profit analysis sections in a column
+   * Render all street profit analysis sections in a column
    */
-  private async renderStreetProfitSection(
+  private async renderStreetProfitColumnSections(
     ctx: any,
     data: CompleteStreetProfitChartData,
     x: number,
@@ -926,7 +903,7 @@ export class ChartGenerator {
     for (const stage of stages) {
       const stageData = data[stage as keyof CompleteStreetProfitChartData];
       if (stageData) {
-        await this.renderSingleStreetProfitSection(
+        await this.renderStreetProfitSection(
           ctx,
           stageData,
           stageLabels[stage as keyof typeof stageLabels],
@@ -941,9 +918,24 @@ export class ChartGenerator {
   }
 
   /**
-   * Render a single action analysis chart section with percentage bars per position
+   * Create stage labels for action analysis (showdown is special case)
    */
-  private async renderSingleActionAnalysisSection(
+  private createActionAnalysisStageLabels(): Record<string, string> {
+    const labels: Record<string, string> = {};
+    POKER.STAGES.forEach(stage => {
+      if (stage === 'showdown') {
+        labels[stage] = 'Showdown Win% Analysis';
+      } else {
+        labels[stage] = `${this.capitalizeFirstLetter(stage)} Action Analysis`;
+      }
+    });
+    return labels;
+  }
+
+  /**
+   * Render an action analysis chart section with percentage bars per position
+   */
+  private async renderActionAnalysisSection(
     ctx: any,
     data: StreetActionAnalysisData,
     title: string,
@@ -968,15 +960,10 @@ export class ChartGenerator {
     ctx.fillRect(0, 0, width, height);
     
     // Define chart margins and areas
-    const marginTop = 40;
-    const marginBottom = 60;
-    const marginLeft = 80;
-    const marginRight = 120; // Extra space for legend
-    
-    const chartAreaX = marginLeft;
-    const chartAreaY = marginTop;
-    const chartAreaWidth = width - marginLeft - marginRight;
-    const chartAreaHeight = height - marginTop - marginBottom;
+    const chartAreaX = CHART_LAYOUT.MARGIN_LEFT;
+    const chartAreaY = CHART_LAYOUT.MARGIN_TOP;
+    const chartAreaWidth = width - CHART_LAYOUT.MARGIN_LEFT - CHART_LAYOUT.MARGIN_RIGHT_WITH_LEGEND;
+    const chartAreaHeight = height - CHART_LAYOUT.MARGIN_TOP - CHART_LAYOUT.MARGIN_BOTTOM;
     
     // Draw title
     ctx.fillStyle = '#000000';
@@ -994,7 +981,7 @@ export class ChartGenerator {
       }
       
       // Draw legend
-      this.drawActionLegend(ctx, width - marginRight + 10, chartAreaY, data.stage === 'showdown');
+      this.drawActionLegend(ctx, width - CHART_LAYOUT.MARGIN_RIGHT_WITH_LEGEND + 10, chartAreaY, data.stage === 'showdown');
     }
     
     // Restore the context state
@@ -1015,7 +1002,7 @@ export class ChartGenerator {
   ): void {
     const positionCount = data.positions.length;
     const groupWidth = chartAreaWidth / positionCount;
-    const barWidth = groupWidth * 0.7; // 70% of group width for the bar
+    const barWidth = groupWidth * CHART_LAYOUT.BAR_WIDTH_RATIO;
     
     // Draw Y-axis grid and labels
     this.drawPercentageYAxis(ctx, chartAreaX, chartAreaY, chartAreaWidth, chartAreaHeight);
@@ -1241,7 +1228,7 @@ export class ChartGenerator {
     
     Object.entries(data).forEach(([stage, stageData]: [string, StreetActionAnalysisData]) => {
       const stageTotalHands = stageData.positions.reduce((sum: number, pos: ActionAnalysisPositionStats) => sum + pos.totalHands, 0);
-      finalValues[`${stage.charAt(0).toUpperCase() + stage.slice(1)} (${stageTotalHands} hands)`] = stageTotalHands;
+      finalValues[`${this.capitalizeFirstLetter(stage)} (${stageTotalHands} hands)`] = stageTotalHands;
     });
     
     return finalValues;
@@ -1258,6 +1245,48 @@ export class ChartGenerator {
   }
 
   // ===== UTILITY METHODS =====
+
+  /**
+   * Capitalize the first letter of a string
+   */
+  private capitalizeFirstLetter(str: string): string {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  }
+
+  /**
+   * Create stage labels for different analysis types
+   */
+  private createStageLabels(analysisType: string): Record<string, string> {
+    const labels: Record<string, string> = {};
+    POKER.STAGES.forEach(stage => {
+      labels[stage] = `${this.capitalizeFirstLetter(stage)} ${analysisType}`;
+    });
+    return labels;
+  }
+
+  /**
+   * Calculate chart height for multi-stage layouts
+   */
+  private calculateStageChartHeight(totalHeight: number): number {
+    const separatorSpace = (POKER.STAGE_COUNT - 1) * CHART_LAYOUT.SEPARATOR_MARGIN;
+    return Math.floor((totalHeight - separatorSpace) / POKER.STAGE_COUNT);
+  }
+
+  /**
+   * Create gradient color with specified intensity
+   */
+  private createGradientColor(color: {r: number, g: number, b: number}, intensity: number): string {
+    return `rgba(${color.r}, ${color.g}, ${color.b}, ${intensity})`;
+  }
+
+  /**
+   * Calculate gradient intensity based on value ratio
+   */
+  private calculateGradientIntensity(value: number, maxValue: number, range: number): number {
+    if (maxValue === 0) return CHART_LAYOUT.MIN_GRADIENT_INTENSITY;
+    const ratio = Math.abs(value) / Math.abs(maxValue);
+    return CHART_LAYOUT.MIN_GRADIENT_INTENSITY + (ratio * range);
+  }
 
   /**
    * Calculate Y-axis range for BB/100 data

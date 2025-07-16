@@ -178,7 +178,7 @@ export class SqliteManager {
   }
 
   /**
-   * Builds the CREATE TABLE SQL statement
+   * Builds the CREATE TABLE SQL statement with optimized indexes
    */
   private getCreateTableSQL(): string {
     return `
@@ -241,6 +241,12 @@ export class SqliteManager {
         -- Record creation timestamp
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
+      
+      -- Create indexes for better query performance
+      CREATE INDEX IF NOT EXISTS idx_hand_start_time ON ${DATABASE.TABLE_NAME}(hand_start_time);
+      CREATE INDEX IF NOT EXISTS idx_hero_position ON ${DATABASE.TABLE_NAME}(hero_position);
+      CREATE INDEX IF NOT EXISTS idx_final_stage ON ${DATABASE.TABLE_NAME}(final_stage);
+      CREATE INDEX IF NOT EXISTS idx_hero_hand_result ON ${DATABASE.TABLE_NAME}(hero_hand_result);
     `;
   }
 
@@ -249,7 +255,7 @@ export class SqliteManager {
    */
   private getInsertHandSQL(): string {
     return `
-      INSERT INTO ${DATABASE.TABLE_NAME} (
+      INSERT OR IGNORE INTO ${DATABASE.TABLE_NAME} (
         hand_id, hand_start_time, game_type, small_blind, big_blind,
         hero_position, hero_hole_cards, flop_cards, turn_card, river_card,
         hero_preflop_investment, hero_flop_investment, hero_turn_investment, hero_river_investment,
@@ -312,10 +318,15 @@ export class SqliteManager {
   }
 
   /**
-   * Builds SELECT query for chart data with optional date filtering
+   * Builds SELECT query for chart data with optional date filtering and optimized fields
    */
   private buildChartQuery(dateRange?: DateRange): { sql: string; params: any[] } {
-    let sql = `SELECT * FROM ${DATABASE.TABLE_NAME}`;
+    // Select only necessary fields for chart generation to improve performance
+    let sql = `SELECT 
+      hand_id, hand_start_time, big_blind, hero_position, hero_profit, hero_rake,
+      hero_hand_result, final_stage,
+      hero_preflop_actions, hero_flop_actions, hero_turn_actions, hero_river_actions
+    FROM ${DATABASE.TABLE_NAME}`;
     const params: any[] = [];
 
     if (dateRange) {

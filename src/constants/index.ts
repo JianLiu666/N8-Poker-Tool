@@ -60,6 +60,10 @@ export const CHART_COLORS = {
   ACTION_FOLD: 'rgba(147, 197, 253, 0.8)',     // Light blue
   ACTION_WIN_RATE: 'rgba(34, 197, 94, 0.8)',   // Green for win rate
   
+  // RGB values for gradient calculations
+  PROFIT_GREEN: { r: 34, g: 197, b: 94 },
+  LOSS_RED: { r: 239, g: 68, b: 68 },
+  
   // General styling
   BACKGROUND_ALPHA: 0.1,
   BAR_BACKGROUND_ALPHA: 0.8,
@@ -71,7 +75,39 @@ export const CHART_COLORS = {
 export const POKER = {
   MAX_PLAYERS: 6,
   POSITION_COUNT: 6,
-  DECIMAL_PRECISION: 2
+  DECIMAL_PRECISION: 2,
+  STAGES: ['preflop', 'flop', 'turn', 'river', 'showdown'] as const,
+  STAGE_COUNT: 5
+} as const;
+
+// ================== Chart Layout Constants ==================
+
+export const CHART_LAYOUT = {
+  // Chart margins
+  MARGIN_TOP: 40,
+  MARGIN_BOTTOM: 60,
+  MARGIN_LEFT: 80,
+  MARGIN_RIGHT: 30,
+  MARGIN_RIGHT_WITH_LEGEND: 120,
+  
+  // Bar chart dimensions
+  BAR_WIDTH_RATIO: 0.7,
+  BAR_GROUP_WIDTH_RATIO: 0.25,
+  BAR_SPACING_RATIO: 0.08,
+  
+  // Section separators
+  SEPARATOR_MARGIN: 10,
+  SEPARATOR_WIDTH: 4,
+  
+  // Grid and axis
+  GRID_LINE_COUNT: 5,
+  PERCENTAGE_GRID_INCREMENT: 20,
+  
+  // Gradient intensities
+  MIN_GRADIENT_INTENSITY: 0.3,
+  MAX_GRADIENT_INTENSITY: 0.8,
+  PROFIT_GRADIENT_RANGE: 0.5,
+  TOTAL_PNL_GRADIENT_RANGE: 0.4
 } as const;
 
 // ================== Parsing Constants ==================

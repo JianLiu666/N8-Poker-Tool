@@ -22,7 +22,7 @@ import { formatTimestamp, ensureDirectoryExists } from '../utils';
 // Register Chart.js components
 Chart.register(...registerables, ChartDataLabels);
 
-type ChartType = 'profit' | 'bb100' | 'street-analysis' | 'combined-profit-bb100';
+type ChartType = 'profit-analysis' | 'street-analysis';
 
 /**
  * Chart generator class responsible for creating visual charts from poker data
@@ -37,28 +37,6 @@ export class ChartGenerator {
 
   // ===== PUBLIC CHART GENERATION METHODS =====
 
-  /**
-   * Generate profit trend chart showing cumulative profit over time
-   */
-  async generateProfitChart(data: ProfitChartData): Promise<ChartGenerationResult> {
-    const config = this.createChartConfig('profit');
-    const chartConfig = this.buildProfitChartConfiguration(data, config);
-    
-    const finalValues = this.extractProfitFinalValues(data);
-    return this.renderChart(chartConfig, config, finalValues);
-  }
-
-  /**
-   * Generate BB/100 trend chart showing BB/100 over time
-   */
-  async generateBB100Chart(data: BB100ChartData): Promise<ChartGenerationResult> {
-    const config = this.createChartConfig('bb100');
-    const yAxisRange = this.calculateOptimalYAxisRange(data);
-    const chartConfig = this.buildBB100ChartConfiguration(data, config, yAxisRange);
-    
-    const finalValues = this.extractBB100FinalValues(data);
-    return this.renderChart(chartConfig, config, finalValues);
-  }
 
 
 
@@ -87,21 +65,21 @@ export class ChartGenerator {
   }
 
   /**
-   * Generate combined profit and BB/100 chart with vertical layout
+   * Generate profit analysis chart with profit and BB/100 trends
    */
-  async generateCombinedProfitBB100Chart(
+  async generateProfitAnalysisChart(
     profitData: ProfitChartData,
     bb100Data: BB100ChartData
   ): Promise<ChartGenerationResult> {
-    const config = this.createChartConfig('combined-profit-bb100');
+    const config = this.createChartConfig('profit-analysis');
     const profitFinalValues = this.extractProfitFinalValues(profitData);
     const bb100FinalValues = this.extractBB100FinalValues(bb100Data);
     
     // Combine final values
     const finalValues = { ...profitFinalValues, ...bb100FinalValues };
     
-    // Create combined chart
-    const filePath = await this.renderCombinedProfitBB100Chart(profitData, bb100Data, config);
+    // Create profit analysis chart
+    const filePath = await this.renderProfitAnalysisChart(profitData, bb100Data, config);
     
     return {
       filePath,
@@ -118,36 +96,24 @@ export class ChartGenerator {
   private createChartConfig(type: ChartType): ChartConfig {
     const timestamp = formatTimestamp();
     const configs = {
-      'profit': {
-        title: 'Poker Profit Trend Analysis',
+      'profit-analysis': {
+        title: 'Poker Analysis - Profit & BB/100',
         xAxisLabel: 'Hands',
-        yAxisLabel: 'Cumulative Profit',
-        fileName: `poker-profit-chart-${timestamp}`
-      },
-      'bb100': {
-        title: 'Poker BB/100 Trend Analysis',
-        xAxisLabel: 'Hands',
-        yAxisLabel: 'BB/100',
-        fileName: `poker-bb100-chart-${timestamp}`
+        yAxisLabel: 'Analysis',
+        fileName: `poker-profit-analysis-chart-${timestamp}`
       },
       'street-analysis': {
         title: 'Poker Analysis - Action & Profit',
         xAxisLabel: 'Position',
         yAxisLabel: 'Analysis',
         fileName: `poker-street-analysis-chart-${timestamp}`
-      },
-      'combined-profit-bb100': {
-        title: 'Poker Analysis - Profit & BB/100',
-        xAxisLabel: 'Hands',
-        yAxisLabel: 'Analysis',
-        fileName: `poker-combined-profit-bb100-chart-${timestamp}`
       }
     };
 
     const baseConfig = configs[type];
     return {
-      width: (type === 'street-analysis' || type === 'combined-profit-bb100') ? CHARTS.STREET_ANALYSIS_WIDTH : CHARTS.DEFAULT_WIDTH,
-      height: (type === 'street-analysis' || type === 'combined-profit-bb100') ? CHARTS.STREET_ANALYSIS_HEIGHT : CHARTS.DEFAULT_HEIGHT,
+      width: CHARTS.STREET_ANALYSIS_WIDTH,
+      height: CHARTS.STREET_ANALYSIS_HEIGHT,
       ...baseConfig,
       fileName: `${baseConfig.fileName}${CHARTS.DEFAULT_FILE_EXTENSION}`
     };
@@ -866,9 +832,9 @@ export class ChartGenerator {
   }
 
   /**
-   * Render combined profit and BB/100 chart with vertical layout (profit on top, BB/100 on bottom)
+   * Render profit analysis chart with vertical layout (profit on top, BB/100 on bottom)
    */
-  private async renderCombinedProfitBB100Chart(
+  private async renderProfitAnalysisChart(
     profitData: ProfitChartData,
     bb100Data: BB100ChartData,
     config: ChartConfig

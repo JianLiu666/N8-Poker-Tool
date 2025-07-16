@@ -7,12 +7,8 @@ import { DATABASE, CHARTS, LOG_EMOJIS } from '../constants';
 import { createError } from '../utils';
 
 interface ChartResults {
-  profitResult: any;
-  bb100Result: any;
-  streetProfitResult: any;
-  actionAnalysisResult: any;
+  profitAnalysisResult: any;
   streetAnalysisResult: any;
-  combinedProfitBB100Result: any;
 }
 
 export class ChartCommand {
@@ -100,24 +96,18 @@ export class ChartCommand {
   }
 
   /**
-   * Generate profit, BB/100, street analysis, and combined charts
+   * Generate profit analysis and street analysis charts
    */
   private async generateCharts(chartData: { profitData: any; bb100Data: any }, streetProfitData: any, actionAnalysisData: any): Promise<ChartResults> {
     const interval = this.options.interval || CHARTS.DEFAULT_SAMPLING_INTERVAL;
     
-    console.log(`${LOG_EMOJIS.CHART} Generating profit trend chart (interval: ${interval} hands)...`);
-    const profitResult = await this.chartGenerator.generateProfitChart(chartData.profitData);
-    
-    console.log(`${LOG_EMOJIS.CHART} Generating BB/100 trend chart (interval: ${interval} hands)...`);
-    const bb100Result = await this.chartGenerator.generateBB100Chart(chartData.bb100Data);
+    console.log(`${LOG_EMOJIS.CHART} Generating Profit Analysis chart (interval: ${interval} hands)...`);
+    const profitAnalysisResult = await this.chartGenerator.generateProfitAnalysisChart(chartData.profitData, chartData.bb100Data);
 
     console.log(`${LOG_EMOJIS.CHART} Generating Street Analysis chart (high resolution)...`);
     const streetAnalysisResult = await this.chartGenerator.generateStreetAnalysisChart(actionAnalysisData, streetProfitData);
 
-    console.log(`${LOG_EMOJIS.CHART} Generating Combined Profit & BB/100 chart (high resolution)...`);
-    const combinedProfitBB100Result = await this.chartGenerator.generateCombinedProfitBB100Chart(chartData.profitData, chartData.bb100Data);
-
-    return { profitResult, bb100Result, streetProfitResult: null, actionAnalysisResult: null, streetAnalysisResult, combinedProfitBB100Result };
+    return { profitAnalysisResult, streetAnalysisResult };
   }
 
 
@@ -127,10 +117,8 @@ export class ChartCommand {
    */
   private logResults(chartResults: ChartResults, statistics: FinalStatistics): void {
     console.log(`${LOG_EMOJIS.CHART} Charts generated successfully:`);
-    console.log(`   - Profit chart: ${chartResults.profitResult.filePath}`);
-    console.log(`   - BB/100 chart: ${chartResults.bb100Result.filePath}`);
+    console.log(`   - Profit Analysis chart: ${chartResults.profitAnalysisResult.filePath}`);
     console.log(`   - Street Analysis chart: ${chartResults.streetAnalysisResult.filePath}`);
-    console.log(`   - Combined Profit & BB/100 chart: ${chartResults.combinedProfitBB100Result.filePath}`);
     
     this.logStatistics(statistics);
   }
@@ -155,6 +143,7 @@ export class ChartCommand {
       console.log(`   - BB/100 no-showdown: ${stats.bb100NoShowdown.toFixed(2)}`);
     }
     
-    console.log(`${LOG_EMOJIS.INFO} Street Profit Analysis chart created with 5 separate bar charts showing profit/loss by position for each stage`);
+    console.log(`${LOG_EMOJIS.INFO} Profit Analysis chart shows profit trends and BB/100 analysis`);
+    console.log(`${LOG_EMOJIS.INFO} Street Analysis chart shows action analysis and profit analysis by position for each stage`);
   }
 } 

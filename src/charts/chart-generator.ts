@@ -564,8 +564,20 @@ export class ChartGenerator {
       },
       grid: {
         display: true,
-        color: 'rgba(0, 0, 0, 0.1)',
-        lineWidth: 1
+        color: (context: any) => {
+          // Make the zero baseline darker but not too black for better visibility
+          if (context.tick.value === 0) {
+            return 'rgba(0, 0, 0, 0.2)';
+          }
+          return 'rgba(0, 0, 0, 0.1)';
+        },
+        lineWidth: (context: any) => {
+          // Make the zero baseline thicker for better visibility
+          if (context.tick.value === 0) {
+            return 2;
+          }
+          return 1;
+        }
       },
       border: {
         display: true,

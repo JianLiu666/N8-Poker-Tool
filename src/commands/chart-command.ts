@@ -45,26 +45,14 @@ export class ChartCommand {
       console.log(`${LOG_EMOJIS.CHART} Processing ${hands.length} hands for chart generation...`);
 
       // Calculate data and generate charts
-      if (this.options.combinedOnly) {
-        // Generate only the combined chart
-        const streetProfitData = this.chartCalculator.calculateStreetProfitAnalysisChartData(hands);
-        const actionAnalysisData = this.chartCalculator.calculateActionAnalysisChartData(hands);
-        const combinedResult = await this.generateCombinedChart(actionAnalysisData, streetProfitData);
-        
-        console.log(`${LOG_EMOJIS.CHART} Combined Analysis chart generated:`);
-        console.log(`   - Combined Analysis chart: ${combinedResult.filePath}`);
-        
-      } else {
-        // Generate all charts
-        const chartData = this.calculateChartData(hands);
-        const streetProfitData = this.chartCalculator.calculateStreetProfitAnalysisChartData(hands);
-        const actionAnalysisData = this.chartCalculator.calculateActionAnalysisChartData(hands);
-        const chartResults = await this.generateCharts(chartData, streetProfitData, actionAnalysisData);
-        const statistics = this.chartCalculator.getFinalStatistics(chartData.profitData, chartData.bb100Data);
+      const chartData = this.calculateChartData(hands);
+      const streetProfitData = this.chartCalculator.calculateStreetProfitAnalysisChartData(hands);
+      const actionAnalysisData = this.chartCalculator.calculateActionAnalysisChartData(hands);
+      const chartResults = await this.generateCharts(chartData, streetProfitData, actionAnalysisData);
+      const statistics = this.chartCalculator.getFinalStatistics(chartData.profitData, chartData.bb100Data);
 
-        // Output results
-        this.logResults(chartResults, statistics);
-      }
+      // Output results
+      this.logResults(chartResults, statistics);
       console.log(`${LOG_EMOJIS.SUCCESS} Chart command completed successfully!`);
       
     } catch (error) {
@@ -111,7 +99,7 @@ export class ChartCommand {
   }
 
   /**
-   * Generate profit, BB/100, street profit analysis, and action analysis charts
+   * Generate profit, BB/100, and combined analysis charts
    */
   private async generateCharts(chartData: { profitData: any; bb100Data: any }, streetProfitData: any, actionAnalysisData: any): Promise<ChartResults> {
     const interval = this.options.interval || CHARTS.DEFAULT_SAMPLING_INTERVAL;
@@ -122,25 +110,13 @@ export class ChartCommand {
     console.log(`${LOG_EMOJIS.CHART} Generating BB/100 trend chart (interval: ${interval} hands)...`);
     const bb100Result = await this.chartGenerator.generateBB100Chart(chartData.bb100Data);
 
-    console.log(`${LOG_EMOJIS.CHART} Generating Street Profit Analysis chart...`);
-    const streetProfitResult = await this.chartGenerator.generateStreetProfitAnalysisChart(streetProfitData);
-
-    console.log(`${LOG_EMOJIS.CHART} Generating Action Analysis chart...`);
-    const actionAnalysisResult = await this.chartGenerator.generateActionAnalysisChart(actionAnalysisData);
-
     console.log(`${LOG_EMOJIS.CHART} Generating Combined Analysis chart (high resolution)...`);
     const combinedAnalysisResult = await this.chartGenerator.generateCombinedAnalysisChart(actionAnalysisData, streetProfitData);
 
-    return { profitResult, bb100Result, streetProfitResult, actionAnalysisResult, combinedAnalysisResult };
+    return { profitResult, bb100Result, streetProfitResult: null, actionAnalysisResult: null, combinedAnalysisResult };
   }
 
-  /**
-   * Generate only the combined analysis chart
-   */
-  private async generateCombinedChart(actionAnalysisData: any, streetProfitData: any): Promise<any> {
-    console.log(`${LOG_EMOJIS.CHART} Generating Combined Analysis chart (high resolution)...`);
-    return await this.chartGenerator.generateCombinedAnalysisChart(actionAnalysisData, streetProfitData);
-  }
+
 
   /**
    * Log the results of chart generation
@@ -149,8 +125,6 @@ export class ChartCommand {
     console.log(`${LOG_EMOJIS.CHART} Charts generated successfully:`);
     console.log(`   - Profit chart: ${chartResults.profitResult.filePath}`);
     console.log(`   - BB/100 chart: ${chartResults.bb100Result.filePath}`);
-    console.log(`   - Street Profit Analysis chart: ${chartResults.streetProfitResult.filePath}`);
-    console.log(`   - Action Analysis chart: ${chartResults.actionAnalysisResult.filePath}`);
     console.log(`   - Combined Analysis chart: ${chartResults.combinedAnalysisResult.filePath}`);
     
     this.logStatistics(statistics);

@@ -22,7 +22,7 @@ import { formatTimestamp, ensureDirectoryExists } from '../utils';
 // Register Chart.js components
 Chart.register(...registerables, ChartDataLabels);
 
-type ChartType = 'profit' | 'bb100' | 'street-profit-analysis' | 'action-analysis' | 'combined-analysis';
+type ChartType = 'profit' | 'bb100' | 'combined-analysis';
 
 /**
  * Chart generator class responsible for creating visual charts from poker data
@@ -61,40 +61,6 @@ export class ChartGenerator {
   }
 
 
-
-  /**
-   * Generate street profit analysis chart with 5 separate bar charts
-   */
-  async generateStreetProfitAnalysisChart(data: CompleteStreetProfitChartData): Promise<ChartGenerationResult> {
-    const config = this.createChartConfig('street-profit-analysis');
-    const finalValues = this.extractStreetProfitFinalValues(data);
-    
-    // Create 5 separate charts for each stage
-    const filePath = await this.renderStreetProfitChart(data, config);
-    
-    return {
-      filePath,
-      totalHands: this.calculateTotalHandsFromStreetProfit(data),
-      finalValues
-    };
-  }
-
-  /**
-   * Generate action analysis chart with 5 separate bar charts for action proportions
-   */
-  async generateActionAnalysisChart(data: CompleteActionAnalysisChartData): Promise<ChartGenerationResult> {
-    const config = this.createChartConfig('action-analysis');
-    const finalValues = this.extractActionAnalysisFinalValues(data);
-    
-    // Create 5 separate charts for each stage
-    const filePath = await this.renderActionAnalysisChart(data, config);
-    
-    return {
-      filePath,
-      totalHands: this.calculateTotalHandsFromActionAnalysis(data),
-      finalValues
-    };
-  }
 
   /**
    * Generate combined analysis chart with Action Analysis on left and Street Profit Analysis on right
@@ -140,19 +106,6 @@ export class ChartGenerator {
         yAxisLabel: 'BB/100',
         fileName: `poker-bb100-chart-${timestamp}`
       },
-
-      'street-profit-analysis': {
-        title: 'Poker Street Profit Analysis',
-        xAxisLabel: 'Position',
-        yAxisLabel: 'Profit (BB)',
-        fileName: `poker-street-profit-analysis-chart-${timestamp}`
-      },
-      'action-analysis': {
-        title: 'Poker Action Analysis',
-        xAxisLabel: 'Position',
-        yAxisLabel: 'Percentage (%)',
-        fileName: `poker-action-analysis-chart-${timestamp}`
-      },
       'combined-analysis': {
         title: 'Poker Analysis - Action & Profit',
         xAxisLabel: 'Position',
@@ -164,8 +117,7 @@ export class ChartGenerator {
     const baseConfig = configs[type];
     return {
       width: type === 'combined-analysis' ? CHARTS.COMBINED_WIDTH : CHARTS.DEFAULT_WIDTH,
-      height: type === 'combined-analysis' ? CHARTS.COMBINED_HEIGHT : 
-              (type === 'street-profit-analysis' || type === 'action-analysis') ? CHARTS.DEFAULT_HEIGHT * 2 : CHARTS.DEFAULT_HEIGHT,
+      height: type === 'combined-analysis' ? CHARTS.COMBINED_HEIGHT : CHARTS.DEFAULT_HEIGHT,
       ...baseConfig,
       fileName: `${baseConfig.fileName}${CHARTS.DEFAULT_FILE_EXTENSION}`
     };
@@ -274,49 +226,9 @@ export class ChartGenerator {
     };
   }
 
-  /**
-   * Calculate Y-axis range for BB/100 data
-   */
-  private calculateOptimalYAxisRange(data: BB100ChartData): YAxisRange {
-    const allValues = this.getAllBB100Values(data);
 
-    if (allValues.length === 0) {
-      return { min: -10, max: 10 };
-    }
 
-    const min = Math.min(...allValues);
-    const max = Math.max(...allValues);
-    
-    // If all values are close to zero, set reasonable default range
-    if (Math.abs(max - min) < 1) {
-      const center = (max + min) / 2;
-      return {
-        min: center - 5,
-        max: center + 5
-      };
-    }
 
-    // Add 20% padding to the actual range for better visualization
-    const range = max - min;
-    const padding = range * 0.2;
-    
-    return {
-      min: Math.floor((min - padding) * 10) / 10,
-      max: Math.ceil((max + padding) * 10) / 10
-    };
-  }
-
-  /**
-   * Get all BB/100 values for range calculation
-   */
-  private getAllBB100Values(data: BB100ChartData): number[] {
-    return [
-      ...data.allHandsWithRakeBB100.map(point => point.value),
-      ...data.allHandsActualBB100.map(point => point.value),
-      ...data.showdownOnlyBB100.map(point => point.value),
-      ...data.noShowdownOnlyBB100.map(point => point.value)
-    ];
-  }
 
 
 
@@ -801,79 +713,6 @@ export class ChartGenerator {
         color: 'black'
       }
     };
-  }
-
-  /**
-   * Render and save chart to file
-   */
-  private async renderChart(
-    chartConfig: ChartConfiguration, 
-    config: ChartConfig, 
-    finalValues: Record<string, number>
-  ): Promise<ChartGenerationResult> {
-    await ensureDirectoryExists(this.outputDir);
-
-    const canvas = createCanvas(config.width, config.height);
-    const ctx = canvas.getContext('2d');
-
-    // Draw white background for JPG output
-    this.drawBackground(ctx, config);
-
-    const chart = new Chart(ctx as any, chartConfig);
-
-    // Wait for chart to render completely
-    await this.waitForRender();
-
-    // Create final canvas with white background
-    const finalCanvas = this.createFinalCanvas(canvas, config);
-    const filePath = path.join(this.outputDir, config.fileName);
-
-    // Save chart as JPG file
-    await this.saveChart(finalCanvas, filePath);
-
-    // Clean up memory
-    chart.destroy();
-
-    return {
-      filePath,
-      totalHands: this.calculateTotalHands(chartConfig),
-      finalValues
-    };
-  }
-
-  /**
-   * Draw white background on canvas
-   */
-  private drawBackground(ctx: any, config: ChartConfig): void {
-    ctx.save();
-    ctx.fillStyle = CHARTS.BACKGROUND_COLOR;
-    ctx.fillRect(0, 0, config.width, config.height);
-    ctx.restore();
-  }
-
-  /**
-   * Wait for chart rendering to complete
-   */
-  private async waitForRender(): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, 100));
-  }
-
-  /**
-   * Create final canvas with background
-   */
-  private createFinalCanvas(originalCanvas: any, config: ChartConfig): any {
-    const { createCanvas } = require('canvas');
-    const finalCanvas = createCanvas(config.width, config.height);
-    const finalCtx = finalCanvas.getContext('2d');
-    
-    // Draw white background
-    finalCtx.fillStyle = CHARTS.BACKGROUND_COLOR;
-    finalCtx.fillRect(0, 0, config.width, config.height);
-    
-    // Draw original chart content
-    finalCtx.drawImage(originalCanvas, 0, 0);
-
-    return finalCanvas;
   }
 
   /**
@@ -1421,20 +1260,47 @@ export class ChartGenerator {
   // ===== UTILITY METHODS =====
 
   /**
-   * Calculate total hands from chart configuration
+   * Calculate Y-axis range for BB/100 data
    */
-  private calculateTotalHands(chartConfig: ChartConfiguration): number {
-    const datasets = chartConfig.data?.datasets;
-    return datasets && datasets[0] && datasets[0].data 
-      ? (datasets[0].data as any[]).length 
-      : 0;
+  private calculateOptimalYAxisRange(data: BB100ChartData): YAxisRange {
+    const allValues = this.getAllBB100Values(data);
+
+    if (allValues.length === 0) {
+      return { min: -10, max: 10 };
+    }
+
+    const min = Math.min(...allValues);
+    const max = Math.max(...allValues);
+    
+    // If all values are close to zero, set reasonable default range
+    if (Math.abs(max - min) < 1) {
+      const center = (max + min) / 2;
+      return {
+        min: center - 5,
+        max: center + 5
+      };
+    }
+
+    // Add 20% padding to the actual range for better visualization
+    const range = max - min;
+    const padding = range * 0.2;
+    
+    return {
+      min: Math.floor((min - padding) * 10) / 10,
+      max: Math.ceil((max + padding) * 10) / 10
+    };
   }
 
   /**
-   * Get the last value from a data series
+   * Get all BB/100 values for range calculation
    */
-  private getLastValue(dataPoints: ChartDataPoint[]): number {
-    return dataPoints.length > 0 ? dataPoints[dataPoints.length - 1].value : 0;
+  private getAllBB100Values(data: BB100ChartData): number[] {
+    return [
+      ...data.allHandsWithRakeBB100.map(point => point.value),
+      ...data.allHandsActualBB100.map(point => point.value),
+      ...data.showdownOnlyBB100.map(point => point.value),
+      ...data.noShowdownOnlyBB100.map(point => point.value)
+    ];
   }
 
   /**
@@ -1460,4 +1326,95 @@ export class ChartGenerator {
       'No Showdown BB/100': this.getLastValue(data.noShowdownOnlyBB100)
     };
   }
+
+  /**
+   * Get the last value from a data series
+   */
+  private getLastValue(dataPoints: ChartDataPoint[]): number {
+    return dataPoints.length > 0 ? dataPoints[dataPoints.length - 1].value : 0;
+  }
+
+  /**
+   * Render and save chart to file
+   */
+  private async renderChart(
+    chartConfig: ChartConfiguration, 
+    config: ChartConfig, 
+    finalValues: Record<string, number>
+  ): Promise<ChartGenerationResult> {
+    await ensureDirectoryExists(this.outputDir);
+
+    const canvas = createCanvas(config.width, config.height);
+    const ctx = canvas.getContext('2d');
+
+    // Draw white background for JPG output
+    this.drawBackground(ctx, config);
+
+    const chart = new Chart(ctx as any, chartConfig);
+
+    // Wait for chart to render completely
+    await this.waitForRender();
+
+    // Create final canvas with white background
+    const finalCanvas = this.createFinalCanvas(canvas, config);
+    const filePath = path.join(this.outputDir, config.fileName);
+
+    // Save chart as JPG file
+    await this.saveChart(finalCanvas, filePath);
+
+    // Clean up memory
+    chart.destroy();
+
+    return {
+      filePath,
+      totalHands: this.calculateTotalHands(chartConfig),
+      finalValues
+    };
+  }
+
+  /**
+   * Draw white background on canvas
+   */
+  private drawBackground(ctx: any, config: ChartConfig): void {
+    ctx.save();
+    ctx.fillStyle = CHARTS.BACKGROUND_COLOR;
+    ctx.fillRect(0, 0, config.width, config.height);
+    ctx.restore();
+  }
+
+  /**
+   * Wait for chart rendering to complete
+   */
+  private async waitForRender(): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, 100));
+  }
+
+  /**
+   * Create final canvas with background
+   */
+  private createFinalCanvas(originalCanvas: any, config: ChartConfig): any {
+    const { createCanvas } = require('canvas');
+    const finalCanvas = createCanvas(config.width, config.height);
+    const finalCtx = finalCanvas.getContext('2d');
+    
+    // Draw white background
+    finalCtx.fillStyle = CHARTS.BACKGROUND_COLOR;
+    finalCtx.fillRect(0, 0, config.width, config.height);
+    
+    // Draw original chart content
+    finalCtx.drawImage(originalCanvas, 0, 0);
+
+    return finalCanvas;
+  }
+
+  /**
+   * Calculate total hands from chart configuration
+   */
+  private calculateTotalHands(chartConfig: ChartConfiguration): number {
+    const datasets = chartConfig.data?.datasets;
+    return datasets && datasets[0] && datasets[0].data 
+      ? (datasets[0].data as any[]).length 
+      : 0;
+  }
+
 } 

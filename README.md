@@ -48,27 +48,33 @@ npm start parse -i <input_dir> [-d <database_path>]
 
 ### Chart Command
 ```bash
-node dist/index.js chart [-o <output_dir>] [-d <database_path>] [--start <date>] [--end <date>] [--combined-only]
+node dist/index.js chart [-o <output_dir>] [-d <database_path>] [--start <date>] [--end <date>]
 ```
 - `-o, --output` - Chart output directory (optional, default: `./charts`)
 - `-d, --database` - Database path (optional, default: `./data/poker.db`)
 - `--start` - Start date (YYYY-MM-DD format, optional)
 - `--end` - End date (YYYY-MM-DD format, optional)
-- `--combined-only` - Generate only the high-resolution combined analysis chart (optional)
 
 ## Chart Analysis
 
-### Combined Analysis Chart (New!)
-The `--combined-only` option generates a high-resolution (2400x1600px) combined chart with:
-- **Left half**: Street Action Analysis (5 sections showing action percentages by position)
-- **Right half**: Street Profit Analysis (5 sections showing profit/loss by position)
+The tool generates three types of charts:
 
-### Standard Charts
-The profit trend chart shows four trend lines:
+### 1. Profit Trend Chart
+Shows cumulative profit over time with four trend lines:
 - **Profit without rake** - Performance without rake deduction
 - **Actual profit** - Real money flow after rake
 - **Showdown profit** - Profit from hands that went to showdown
 - **No showdown profit** - Profit from hands that didn't reach showdown
+
+### 2. BB/100 Trend Chart
+Shows BB/100 performance over time with the same four trend lines as the profit chart.
+
+### 3. Combined Analysis Chart
+A high-resolution (2400x1600px) combined chart with:
+- **Left half**: Street Action Analysis (5 sections showing action percentages by position)
+- **Right half**: Street Profit Analysis (5 sections showing profit/loss by position)
+
+These charts help analyze playing style and identify areas for improvement.
 
 ## Development
 

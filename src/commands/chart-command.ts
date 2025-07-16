@@ -11,7 +11,7 @@ interface ChartResults {
   bb100Result: any;
   streetProfitResult: any;
   actionAnalysisResult: any;
-  combinedAnalysisResult: any;
+  streetAnalysisResult: any;
 }
 
 export class ChartCommand {
@@ -99,7 +99,7 @@ export class ChartCommand {
   }
 
   /**
-   * Generate profit, BB/100, and combined analysis charts
+   * Generate profit, BB/100, and street analysis charts
    */
   private async generateCharts(chartData: { profitData: any; bb100Data: any }, streetProfitData: any, actionAnalysisData: any): Promise<ChartResults> {
     const interval = this.options.interval || CHARTS.DEFAULT_SAMPLING_INTERVAL;
@@ -110,10 +110,10 @@ export class ChartCommand {
     console.log(`${LOG_EMOJIS.CHART} Generating BB/100 trend chart (interval: ${interval} hands)...`);
     const bb100Result = await this.chartGenerator.generateBB100Chart(chartData.bb100Data);
 
-    console.log(`${LOG_EMOJIS.CHART} Generating Combined Analysis chart (high resolution)...`);
-    const combinedAnalysisResult = await this.chartGenerator.generateCombinedAnalysisChart(actionAnalysisData, streetProfitData);
+    console.log(`${LOG_EMOJIS.CHART} Generating Street Analysis chart (high resolution)...`);
+    const streetAnalysisResult = await this.chartGenerator.generateStreetAnalysisChart(actionAnalysisData, streetProfitData);
 
-    return { profitResult, bb100Result, streetProfitResult: null, actionAnalysisResult: null, combinedAnalysisResult };
+    return { profitResult, bb100Result, streetProfitResult: null, actionAnalysisResult: null, streetAnalysisResult };
   }
 
 
@@ -125,7 +125,7 @@ export class ChartCommand {
     console.log(`${LOG_EMOJIS.CHART} Charts generated successfully:`);
     console.log(`   - Profit chart: ${chartResults.profitResult.filePath}`);
     console.log(`   - BB/100 chart: ${chartResults.bb100Result.filePath}`);
-    console.log(`   - Combined Analysis chart: ${chartResults.combinedAnalysisResult.filePath}`);
+    console.log(`   - Street Analysis chart: ${chartResults.streetAnalysisResult.filePath}`);
     
     this.logStatistics(statistics);
   }

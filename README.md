@@ -69,8 +69,8 @@ Shows cumulative profit over time with four trend lines:
 ### 2. BB/100 Trend Chart
 Shows BB/100 performance over time with the same four trend lines as the profit chart.
 
-### 3. Combined Analysis Chart
-A high-resolution (2400x1600px) combined chart with:
+### 3. Street Analysis Chart
+A high-resolution (2400x1600px) street analysis chart with:
 - **Left half**: Street Action Analysis (5 sections showing action percentages by position)
 - **Right half**: Street Profit Analysis (5 sections showing profit/loss by position)
 

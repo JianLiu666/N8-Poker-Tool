@@ -22,7 +22,7 @@ import { formatTimestamp, ensureDirectoryExists } from '../utils';
 // Register Chart.js components
 Chart.register(...registerables, ChartDataLabels);
 
-type ChartType = 'profit' | 'bb100' | 'combined-analysis';
+type ChartType = 'profit' | 'bb100' | 'street-analysis';
 
 /**
  * Chart generator class responsible for creating visual charts from poker data
@@ -63,21 +63,21 @@ export class ChartGenerator {
 
 
   /**
-   * Generate combined analysis chart with Action Analysis on left and Street Profit Analysis on right
+   * Generate street analysis chart with Action Analysis on left and Street Profit Analysis on right
    */
-  async generateCombinedAnalysisChart(
+  async generateStreetAnalysisChart(
     actionData: CompleteActionAnalysisChartData,
     profitData: CompleteStreetProfitChartData
   ): Promise<ChartGenerationResult> {
-    const config = this.createChartConfig('combined-analysis');
+    const config = this.createChartConfig('street-analysis');
     const actionFinalValues = this.extractActionAnalysisFinalValues(actionData);
     const profitFinalValues = this.extractStreetProfitFinalValues(profitData);
     
     // Combine final values
     const finalValues = { ...actionFinalValues, ...profitFinalValues };
     
-    // Create combined chart
-    const filePath = await this.renderCombinedAnalysisChart(actionData, profitData, config);
+    // Create street analysis chart
+    const filePath = await this.renderStreetAnalysisChart(actionData, profitData, config);
     
     return {
       filePath,
@@ -106,18 +106,18 @@ export class ChartGenerator {
         yAxisLabel: 'BB/100',
         fileName: `poker-bb100-chart-${timestamp}`
       },
-      'combined-analysis': {
+      'street-analysis': {
         title: 'Poker Analysis - Action & Profit',
         xAxisLabel: 'Position',
         yAxisLabel: 'Analysis',
-        fileName: `poker-combined-analysis-chart-${timestamp}`
+        fileName: `poker-street-analysis-chart-${timestamp}`
       }
     };
 
     const baseConfig = configs[type];
     return {
-      width: type === 'combined-analysis' ? CHARTS.COMBINED_WIDTH : CHARTS.DEFAULT_WIDTH,
-      height: type === 'combined-analysis' ? CHARTS.COMBINED_HEIGHT : CHARTS.DEFAULT_HEIGHT,
+      width: type === 'street-analysis' ? CHARTS.STREET_ANALYSIS_WIDTH : CHARTS.DEFAULT_WIDTH,
+      height: type === 'street-analysis' ? CHARTS.STREET_ANALYSIS_HEIGHT : CHARTS.DEFAULT_HEIGHT,
       ...baseConfig,
       fileName: `${baseConfig.fileName}${CHARTS.DEFAULT_FILE_EXTENSION}`
     };
@@ -783,9 +783,9 @@ export class ChartGenerator {
   }
 
   /**
-   * Render combined analysis chart with Action Analysis on left and Street Profit Analysis on right
+   * Render street analysis chart with Action Analysis on left and Street Profit Analysis on right
    */
-  private async renderCombinedAnalysisChart(
+  private async renderStreetAnalysisChart(
     actionData: CompleteActionAnalysisChartData,
     profitData: CompleteStreetProfitChartData,
     config: ChartConfig

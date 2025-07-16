@@ -22,7 +22,7 @@ import { formatTimestamp, ensureDirectoryExists } from '../utils';
 // Register Chart.js components
 Chart.register(...registerables, ChartDataLabels);
 
-type ChartType = 'profit' | 'bb100' | 'street-analysis';
+type ChartType = 'profit' | 'bb100' | 'street-analysis' | 'combined-profit-bb100';
 
 /**
  * Chart generator class responsible for creating visual charts from poker data
@@ -86,6 +86,30 @@ export class ChartGenerator {
     };
   }
 
+  /**
+   * Generate combined profit and BB/100 chart with vertical layout
+   */
+  async generateCombinedProfitBB100Chart(
+    profitData: ProfitChartData,
+    bb100Data: BB100ChartData
+  ): Promise<ChartGenerationResult> {
+    const config = this.createChartConfig('combined-profit-bb100');
+    const profitFinalValues = this.extractProfitFinalValues(profitData);
+    const bb100FinalValues = this.extractBB100FinalValues(bb100Data);
+    
+    // Combine final values
+    const finalValues = { ...profitFinalValues, ...bb100FinalValues };
+    
+    // Create combined chart
+    const filePath = await this.renderCombinedProfitBB100Chart(profitData, bb100Data, config);
+    
+    return {
+      filePath,
+      totalHands: profitData.allHandsWithRake.length,
+      finalValues
+    };
+  }
+
   // ===== CHART CONFIGURATION METHODS =====
 
   /**
@@ -111,13 +135,19 @@ export class ChartGenerator {
         xAxisLabel: 'Position',
         yAxisLabel: 'Analysis',
         fileName: `poker-street-analysis-chart-${timestamp}`
+      },
+      'combined-profit-bb100': {
+        title: 'Poker Analysis - Profit & BB/100',
+        xAxisLabel: 'Hands',
+        yAxisLabel: 'Analysis',
+        fileName: `poker-combined-profit-bb100-chart-${timestamp}`
       }
     };
 
     const baseConfig = configs[type];
     return {
-      width: type === 'street-analysis' ? CHARTS.STREET_ANALYSIS_WIDTH : CHARTS.DEFAULT_WIDTH,
-      height: type === 'street-analysis' ? CHARTS.STREET_ANALYSIS_HEIGHT : CHARTS.DEFAULT_HEIGHT,
+      width: (type === 'street-analysis' || type === 'combined-profit-bb100') ? CHARTS.STREET_ANALYSIS_WIDTH : CHARTS.DEFAULT_WIDTH,
+      height: (type === 'street-analysis' || type === 'combined-profit-bb100') ? CHARTS.STREET_ANALYSIS_HEIGHT : CHARTS.DEFAULT_HEIGHT,
       ...baseConfig,
       fileName: `${baseConfig.fileName}${CHARTS.DEFAULT_FILE_EXTENSION}`
     };
@@ -836,6 +866,82 @@ export class ChartGenerator {
   }
 
   /**
+   * Render combined profit and BB/100 chart with vertical layout (profit on top, BB/100 on bottom)
+   */
+  private async renderCombinedProfitBB100Chart(
+    profitData: ProfitChartData,
+    bb100Data: BB100ChartData,
+    config: ChartConfig
+  ): Promise<string> {
+    await ensureDirectoryExists(this.outputDir);
+
+    // Create high-resolution canvas
+    const canvas = createCanvas(config.width, config.height);
+    const ctx = canvas.getContext('2d');
+
+    // Draw white background
+    ctx.fillStyle = CHARTS.BACKGROUND_COLOR;
+    ctx.fillRect(0, 0, config.width, config.height);
+
+    // Define dimensions for top and bottom halves
+    const halfHeight = config.height / 2;
+    const separatorHeight = 4;
+    const topHeight = halfHeight - separatorHeight / 2;
+    const bottomHeight = halfHeight - separatorHeight / 2;
+    const bottomStartY = halfHeight + separatorHeight / 2;
+
+    // Draw main title
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 24px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Poker Analysis - Profit & BB/100', config.width / 2, 40);
+
+    // Draw section titles
+    ctx.font = 'bold 18px Arial';
+    ctx.fillText('Profit Trend Analysis', config.width / 2, 80);
+    ctx.fillText('BB/100 Trend Analysis', config.width / 2, bottomStartY + 40);
+
+    // Draw separator line
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.lineWidth = separatorHeight;
+    ctx.beginPath();
+    ctx.moveTo(0, halfHeight);
+    ctx.lineTo(config.width, halfHeight);
+    ctx.stroke();
+
+    // Calculate chart dimensions for each section
+    const chartTopMargin = 100;
+    const chartWidth = config.width - 40; // 20px margin on each side
+    const chartLeftMargin = 20;
+    const topChartHeight = topHeight - chartTopMargin - 20;
+    const bottomChartHeight = bottomHeight - 60 - 20; // 60px for title, 20px bottom margin
+
+    // Render top section - Profit Chart
+    await this.renderProfitSection(
+      ctx,
+      profitData,
+      chartLeftMargin,
+      chartTopMargin,
+      chartWidth,
+      topChartHeight
+    );
+
+    // Render bottom section - BB/100 Chart
+    await this.renderBB100Section(
+      ctx,
+      bb100Data,
+      chartLeftMargin,
+      bottomStartY + 60,
+      chartWidth,
+      bottomChartHeight
+    );
+
+    const filePath = path.join(this.outputDir, config.fileName);
+    await this.saveChart(canvas, filePath);
+    return filePath;
+  }
+
+  /**
    * Render all action analysis sections in a column
    */
   private async renderActionAnalysisColumnSections(
@@ -1444,6 +1550,121 @@ export class ChartGenerator {
     return datasets && datasets[0] && datasets[0].data 
       ? (datasets[0].data as any[]).length 
       : 0;
+  }
+
+  /**
+   * Render profit chart section as a line chart
+   */
+  private async renderProfitSection(
+    ctx: any,
+    data: ProfitChartData,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): Promise<void> {
+    // Save the current context state
+    ctx.save();
+    
+    // Set clipping region for this chart section
+    ctx.beginPath();
+    ctx.rect(x, y, width, height);
+    ctx.clip();
+    
+    // Translate to the chart section position
+    ctx.translate(x, y);
+    
+    // Create a temporary canvas for the profit chart
+    const tempCanvas = createCanvas(width, height);
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    // Draw white background
+    tempCtx.fillStyle = CHARTS.BACKGROUND_COLOR;
+    tempCtx.fillRect(0, 0, width, height);
+    
+    // Create chart configuration for profit
+    const profitConfig = this.buildProfitChartConfiguration(data, {
+      width,
+      height,
+      title: '', // No title for section
+      xAxisLabel: 'Hands',
+      yAxisLabel: 'Cumulative Profit',
+      fileName: 'temp'
+    });
+    
+    // Create and render the Chart.js chart
+    const chart = new Chart(tempCtx as any, profitConfig);
+    
+    // Wait for chart to render
+    await this.waitForRender();
+    
+    // Draw the chart onto the main canvas
+    ctx.drawImage(tempCanvas, 0, 0);
+    
+    // Clean up
+    chart.destroy();
+    
+    // Restore the context state
+    ctx.restore();
+  }
+
+  /**
+   * Render BB/100 chart section as a line chart
+   */
+  private async renderBB100Section(
+    ctx: any,
+    data: BB100ChartData,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): Promise<void> {
+    // Save the current context state
+    ctx.save();
+    
+    // Set clipping region for this chart section
+    ctx.beginPath();
+    ctx.rect(x, y, width, height);
+    ctx.clip();
+    
+    // Translate to the chart section position
+    ctx.translate(x, y);
+    
+    // Create a temporary canvas for the BB/100 chart
+    const tempCanvas = createCanvas(width, height);
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    // Draw white background
+    tempCtx.fillStyle = CHARTS.BACKGROUND_COLOR;
+    tempCtx.fillRect(0, 0, width, height);
+    
+    // Calculate optimal Y-axis range for BB/100 data
+    const yAxisRange = this.calculateOptimalYAxisRange(data);
+    
+    // Create chart configuration for BB/100
+    const bb100Config = this.buildBB100ChartConfiguration(data, {
+      width,
+      height,
+      title: '', // No title for section
+      xAxisLabel: 'Hands',
+      yAxisLabel: 'BB/100',
+      fileName: 'temp'
+    }, yAxisRange);
+    
+    // Create and render the Chart.js chart
+    const chart = new Chart(tempCtx as any, bb100Config);
+    
+    // Wait for chart to render
+    await this.waitForRender();
+    
+    // Draw the chart onto the main canvas
+    ctx.drawImage(tempCanvas, 0, 0);
+    
+    // Clean up
+    chart.destroy();
+    
+    // Restore the context state
+    ctx.restore();
   }
 
 } 

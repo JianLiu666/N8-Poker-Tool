@@ -12,6 +12,7 @@ interface ChartResults {
   streetProfitResult: any;
   actionAnalysisResult: any;
   streetAnalysisResult: any;
+  combinedProfitBB100Result: any;
 }
 
 export class ChartCommand {
@@ -99,7 +100,7 @@ export class ChartCommand {
   }
 
   /**
-   * Generate profit, BB/100, and street analysis charts
+   * Generate profit, BB/100, street analysis, and combined charts
    */
   private async generateCharts(chartData: { profitData: any; bb100Data: any }, streetProfitData: any, actionAnalysisData: any): Promise<ChartResults> {
     const interval = this.options.interval || CHARTS.DEFAULT_SAMPLING_INTERVAL;
@@ -113,7 +114,10 @@ export class ChartCommand {
     console.log(`${LOG_EMOJIS.CHART} Generating Street Analysis chart (high resolution)...`);
     const streetAnalysisResult = await this.chartGenerator.generateStreetAnalysisChart(actionAnalysisData, streetProfitData);
 
-    return { profitResult, bb100Result, streetProfitResult: null, actionAnalysisResult: null, streetAnalysisResult };
+    console.log(`${LOG_EMOJIS.CHART} Generating Combined Profit & BB/100 chart (high resolution)...`);
+    const combinedProfitBB100Result = await this.chartGenerator.generateCombinedProfitBB100Chart(chartData.profitData, chartData.bb100Data);
+
+    return { profitResult, bb100Result, streetProfitResult: null, actionAnalysisResult: null, streetAnalysisResult, combinedProfitBB100Result };
   }
 
 
@@ -126,6 +130,7 @@ export class ChartCommand {
     console.log(`   - Profit chart: ${chartResults.profitResult.filePath}`);
     console.log(`   - BB/100 chart: ${chartResults.bb100Result.filePath}`);
     console.log(`   - Street Analysis chart: ${chartResults.streetAnalysisResult.filePath}`);
+    console.log(`   - Combined Profit & BB/100 chart: ${chartResults.combinedProfitBB100Result.filePath}`);
     
     this.logStatistics(statistics);
   }

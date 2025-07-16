@@ -11,7 +11,7 @@ import {
   ActionAnalysisPositionStats,
   StreetActionAnalysisData,
   CompleteActionAnalysisChartData
-} from './chart-types';
+} from '../types';
 import { CHARTS, POKER } from '../constants';
 import { roundToDecimals, isShowdownResult } from '../utils';
 
@@ -605,12 +605,6 @@ export class ChartCalculator {
     ];
   }
 
-  /**
-   * Check if a stage is valid
-   */
-  private isValidStage(stage: string): boolean {
-    return POKER.STAGES.includes(stage as any);
-  }
 
   /**
    * Get stage order index
@@ -621,11 +615,5 @@ export class ChartCalculator {
 
 
 
-  /**
-   * Calculate total profit for a filtered set of hands
-   */
-  private calculateTotalProfit(filteredHands: PokerHand[]): number {
-    return filteredHands.reduce((sum, hand) => sum + hand.hero_profit, 0);
-  }
 
 } 

@@ -8,4 +8,4 @@ export { ChartCalculator } from './chart-calculator';
 export { ChartGenerator } from './chart-generator';
 
 // ================== Type Definitions ==================
-export * from './chart-types'; 
+export * from '../types'; 

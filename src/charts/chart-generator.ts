@@ -1,5 +1,4 @@
 import { Chart, ChartConfiguration, registerables } from 'chart.js';
-import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { createCanvas } from 'canvas';
 import path from 'path';
 import { 
@@ -15,12 +14,12 @@ import {
   CompleteActionAnalysisChartData,
   StreetActionAnalysisData,
   ActionAnalysisPositionStats
-} from './chart-types';
+} from '../types';
 import { CHARTS, CHART_COLORS, CHART_LAYOUT, POKER } from '../constants';
 import { formatTimestamp, ensureDirectoryExists } from '../utils';
 
 // Register Chart.js components
-Chart.register(...registerables, ChartDataLabels);
+Chart.register(...registerables);
 
 type ChartType = 'profit-analysis' | 'street-analysis';
 
@@ -232,18 +231,6 @@ export class ChartGenerator {
 
 
 
-  /**
-   * Calculate total hands from street profit data
-   */
-  private calculateTotalHandsFromStreetProfit(data: CompleteStreetProfitChartData): number {
-    let totalHands = 0;
-    Object.values(data).forEach((stageData: StreetProfitAnalysisData) => {
-      stageData.positions.forEach((pos: StreetProfitPositionStats) => {
-        totalHands += pos.profitCount + pos.lossCount;
-      });
-    });
-    return totalHands;
-  }
 
   /**
    * Extract final values for street profit chart
@@ -262,55 +249,6 @@ export class ChartGenerator {
 
 
 
-  /**
-   * Render street profit chart with separate bar charts for each stage
-   */
-  private async renderStreetProfitChart(
-    data: CompleteStreetProfitChartData, 
-    config: ChartConfig
-  ): Promise<string> {
-    await ensureDirectoryExists(this.outputDir);
-
-    const chartHeight = this.calculateStageChartHeight(config.height);
-    const canvas = createCanvas(config.width, config.height);
-    const ctx = canvas.getContext('2d');
-
-    // Draw white background
-    ctx.fillStyle = CHARTS.BACKGROUND_COLOR;
-    ctx.fillRect(0, 0, config.width, config.height);
-
-    let currentY = 0;
-    const stageLabels = this.createStageLabels('Profit Analysis');
-
-    // Render each stage chart
-    for (let i = 0; i < POKER.STAGES.length; i++) {
-      const stage = POKER.STAGES[i];
-      const stageData = data[stage as keyof CompleteStreetProfitChartData];
-      
-      await this.renderStreetProfitSection(
-        ctx, 
-        stageData, 
-        stageLabels[stage], 
-        0, 
-        currentY, 
-        config.width, 
-        chartHeight
-      );
-      
-      currentY += chartHeight;
-      
-      // Add separator line between charts (except after the last chart)
-      if (i < POKER.STAGES.length - 1) {
-        currentY = this.drawSectionSeparator(ctx, currentY, config.width);
-      }
-    }
-
-    // Save the composite chart
-    const filePath = path.join(this.outputDir, config.fileName);
-    await this.saveChart(canvas, filePath);
-
-    return filePath;
-  }
 
 
 
@@ -552,30 +490,6 @@ export class ChartGenerator {
     }
   }
 
-  /**
-   * Draw X-axis grid lines
-   */
-  private drawXAxisGrid(
-    ctx: any,
-    chartX: number,
-    chartY: number,
-    chartWidth: number,
-    chartHeight: number,
-    dataPointCount: number
-  ): void {
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
-    ctx.lineWidth = 1;
-    
-    for (let i = 0; i <= dataPointCount; i++) {
-      const x = chartX + (i / dataPointCount) * chartWidth;
-      
-      // Draw grid line
-      ctx.beginPath();
-      ctx.moveTo(x, chartY);
-      ctx.lineTo(x, chartY + chartHeight);
-      ctx.stroke();
-    }
-  }
 
   // ===== CHART OPTIONS CONFIGURATION METHODS =====
 
@@ -596,11 +510,7 @@ export class ChartGenerator {
       },
       plugins: {
         title: this.createTitleConfig(config.title),
-        legend: this.createLegendConfig(),
-        // Explicitly disable datalabels for line charts to maintain readability
-        datalabels: {
-          display: false
-        }
+        legend: this.createLegendConfig()
       },
       elements: {
         line: {
@@ -714,46 +624,6 @@ export class ChartGenerator {
 
   // ===== ACTION ANALYSIS HELPER METHODS =====
 
-  /**
-   * Render action analysis chart with separate bar charts for each stage
-   */
-  private async renderActionAnalysisChart(
-    data: CompleteActionAnalysisChartData, 
-    config: ChartConfig
-  ): Promise<string> {
-    await ensureDirectoryExists(this.outputDir);
-
-    const chartHeight = this.calculateStageChartHeight(config.height);
-    const canvas = createCanvas(config.width, config.height);
-    const ctx = canvas.getContext('2d');
-
-    // Draw white background
-    ctx.fillStyle = CHARTS.BACKGROUND_COLOR;
-    ctx.fillRect(0, 0, config.width, config.height);
-
-    let currentY = 0;
-    const stageLabels = this.createActionAnalysisStageLabels();
-
-    for (const stage of POKER.STAGES) {
-      const stageData = data[stage as keyof CompleteActionAnalysisChartData];
-      if (stageData) {
-        await this.renderActionAnalysisSection(
-          ctx,
-          stageData,
-          stageLabels[stage],
-          0,
-          currentY,
-          config.width,
-          chartHeight
-        );
-        currentY += chartHeight + CHART_LAYOUT.SEPARATOR_MARGIN;
-      }
-    }
-
-    const filePath = path.join(this.outputDir, config.fileName);
-    await this.saveChart(canvas, filePath);
-    return filePath;
-  }
 
   /**
    * Render street analysis chart with Action Analysis on left and Street Profit Analysis on right
@@ -1435,88 +1305,7 @@ export class ChartGenerator {
     return dataPoints.length > 0 ? dataPoints[dataPoints.length - 1].value : 0;
   }
 
-  /**
-   * Render and save chart to file
-   */
-  private async renderChart(
-    chartConfig: ChartConfiguration, 
-    config: ChartConfig, 
-    finalValues: Record<string, number>
-  ): Promise<ChartGenerationResult> {
-    await ensureDirectoryExists(this.outputDir);
 
-    const canvas = createCanvas(config.width, config.height);
-    const ctx = canvas.getContext('2d');
-
-    // Draw white background for JPG output
-    this.drawBackground(ctx, config);
-
-    const chart = new Chart(ctx as any, chartConfig);
-
-    // Wait for chart to render completely
-    await this.waitForRender();
-
-    // Create final canvas with white background
-    const finalCanvas = this.createFinalCanvas(canvas, config);
-    const filePath = path.join(this.outputDir, config.fileName);
-
-    // Save chart as JPG file
-    await this.saveChart(finalCanvas, filePath);
-
-    // Clean up memory
-    chart.destroy();
-
-    return {
-      filePath,
-      totalHands: this.calculateTotalHands(chartConfig),
-      finalValues
-    };
-  }
-
-  /**
-   * Draw white background on canvas
-   */
-  private drawBackground(ctx: any, config: ChartConfig): void {
-    ctx.save();
-    ctx.fillStyle = CHARTS.BACKGROUND_COLOR;
-    ctx.fillRect(0, 0, config.width, config.height);
-    ctx.restore();
-  }
-
-  /**
-   * Wait for chart rendering to complete
-   */
-  private async waitForRender(): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, 100));
-  }
-
-  /**
-   * Create final canvas with background
-   */
-  private createFinalCanvas(originalCanvas: any, config: ChartConfig): any {
-    const { createCanvas } = require('canvas');
-    const finalCanvas = createCanvas(config.width, config.height);
-    const finalCtx = finalCanvas.getContext('2d');
-    
-    // Draw white background
-    finalCtx.fillStyle = CHARTS.BACKGROUND_COLOR;
-    finalCtx.fillRect(0, 0, config.width, config.height);
-    
-    // Draw original chart content
-    finalCtx.drawImage(originalCanvas, 0, 0);
-
-    return finalCanvas;
-  }
-
-  /**
-   * Calculate total hands from chart configuration
-   */
-  private calculateTotalHands(chartConfig: ChartConfiguration): number {
-    const datasets = chartConfig.data?.datasets;
-    return datasets && datasets[0] && datasets[0].data 
-      ? (datasets[0].data as any[]).length 
-      : 0;
-  }
 
   /**
    * Render profit chart section as a line chart
@@ -1562,7 +1351,7 @@ export class ChartGenerator {
     const chart = new Chart(tempCtx as any, profitConfig);
     
     // Wait for chart to render
-    await this.waitForRender();
+    await new Promise(resolve => setTimeout(resolve, 100));
     
     // Draw the chart onto the main canvas
     ctx.drawImage(tempCanvas, 0, 0);
@@ -1621,7 +1410,7 @@ export class ChartGenerator {
     const chart = new Chart(tempCtx as any, bb100Config);
     
     // Wait for chart to render
-    await this.waitForRender();
+    await new Promise(resolve => setTimeout(resolve, 100));
     
     // Draw the chart onto the main canvas
     ctx.drawImage(tempCanvas, 0, 0);

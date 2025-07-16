@@ -23,9 +23,7 @@ export const CHARTS = {
   DEFAULT_FILE_EXTENSION: '.jpg',
   BACKGROUND_COLOR: '#FFFFFF',
   
-  // Dimensions and quality
-  DEFAULT_WIDTH: 1200,
-  DEFAULT_HEIGHT: 800,
+  // Quality settings
   DEFAULT_QUALITY: 0.95,
   
   // Street analysis chart dimensions (higher resolution)
@@ -46,11 +44,6 @@ export const CHART_COLORS = {
   SHOWDOWN_PROFIT: 'rgb(59, 130, 246)',
   NO_SHOWDOWN_PROFIT: 'rgb(239, 68, 68)',
   
-  // Bar chart colors
-  BAR_WINS: 'rgba(34, 197, 94, 0.8)',
-  BAR_LOSSES: 'rgba(239, 68, 68, 0.8)',
-  BAR_WINS_BORDER: 'rgb(34, 197, 94)',
-  BAR_LOSSES_BORDER: 'rgb(239, 68, 68)',
   
   // Action Analysis colors
   ACTION_RAISE: 'rgba(153, 27, 27, 0.8)',      // Dark red
@@ -66,7 +59,6 @@ export const CHART_COLORS = {
   
   // General styling
   BACKGROUND_ALPHA: 0.1,
-  BAR_BACKGROUND_ALPHA: 0.8,
   BORDER_WIDTH: 2
 } as const;
 
@@ -97,11 +89,6 @@ export const CHART_LAYOUT = {
   
   // Section separators
   SEPARATOR_MARGIN: 10,
-  SEPARATOR_WIDTH: 4,
-  
-  // Grid and axis
-  GRID_LINE_COUNT: 5,
-  PERCENTAGE_GRID_INCREMENT: 20,
   
   // Gradient intensities
   MIN_GRADIENT_INTENSITY: 0.3,

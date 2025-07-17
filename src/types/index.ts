@@ -174,7 +174,23 @@ export interface CompletePositionProfitChartData {
   bb: PositionProfitChartData;
 }
 
+// Position-specific BB/100 trend analysis types
+export interface PositionBB100ChartData {
+  position: string;
+  actualBB100: ChartDataPoint[];
+  showdownBB100: ChartDataPoint[];
+  noShowdownBB100: ChartDataPoint[];
+}
 
+export interface CompletePositionBB100ChartData {
+  overall: PositionBB100ChartData;
+  utg: PositionBB100ChartData;
+  hj: PositionBB100ChartData;
+  co: PositionBB100ChartData;
+  btn: PositionBB100ChartData;
+  sb: PositionBB100ChartData;
+  bb: PositionBB100ChartData;
+}
 
 // Street-based profit statistics for position analysis
 export interface StreetProfitPositionStats {

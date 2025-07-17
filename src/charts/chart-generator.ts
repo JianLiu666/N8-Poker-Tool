@@ -15,7 +15,9 @@ import {
   StreetActionAnalysisData,
   ActionAnalysisPositionStats,
   CompletePositionProfitChartData,
-  PositionProfitChartData
+  PositionProfitChartData,
+  CompletePositionBB100ChartData,
+  PositionBB100ChartData
 } from '../types';
 import { CHARTS, CHART_COLORS, CHART_LAYOUT, POKER } from '../constants';
 import { formatTimestamp, ensureDirectoryExists } from '../utils';
@@ -23,7 +25,7 @@ import { formatTimestamp, ensureDirectoryExists } from '../utils';
 // Register Chart.js components
 Chart.register(...registerables);
 
-type ChartType = 'profit-analysis' | 'street-analysis' | 'position-profit-analysis';
+type ChartType = 'profit-analysis' | 'street-analysis' | 'position-profit-analysis' | 'position-bb100-analysis';
 
 /**
  * Chart generator class responsible for creating visual charts from poker data
@@ -52,6 +54,28 @@ export class ChartGenerator {
     
     // Calculate total hands from overall data
     const totalHands = positionData.overall.actualProfit.length;
+    
+    return {
+      filePath,
+      totalHands,
+      finalValues
+    };
+  }
+
+  /**
+   * Generate position-specific BB/100 trend analysis chart with 7 vertical subcharts
+   */
+  async generatePositionBB100AnalysisChart(
+    positionData: CompletePositionBB100ChartData
+  ): Promise<ChartGenerationResult> {
+    const config = this.createChartConfig('position-bb100-analysis');
+    const finalValues = this.extractPositionBB100FinalValues(positionData);
+    
+    // Create position BB/100 analysis chart
+    const filePath = await this.renderPositionBB100AnalysisChart(positionData, config);
+    
+    // Calculate total hands from overall data
+    const totalHands = positionData.overall.actualBB100.length;
     
     return {
       filePath,
@@ -133,6 +157,12 @@ export class ChartGenerator {
         xAxisLabel: 'Hands',
         yAxisLabel: 'Cumulative Profit',
         fileName: `poker-position-profit-analysis-chart-${timestamp}`
+      },
+      'position-bb100-analysis': {
+        title: 'Position-Specific BB/100 Trend Analysis',
+        xAxisLabel: 'Hands',
+        yAxisLabel: 'BB/100',
+        fileName: `poker-position-bb100-analysis-chart-${timestamp}`
       }
     };
 
@@ -206,6 +236,38 @@ export class ChartGenerator {
           this.createDataset(
             'No Showdown Profit',
             data.noShowdownProfit,
+            CHART_COLORS.NO_SHOWDOWN_PROFIT,
+            `rgba(239, 68, 68, ${CHART_COLORS.BACKGROUND_ALPHA})`
+          )
+        ]
+      },
+      options: this.createChartOptions(config, yAxisRange)
+    };
+  }
+
+  /**
+   * Build position BB/100 chart configuration for a single position
+   */
+  private buildPositionBB100ChartConfiguration(data: PositionBB100ChartData, config: ChartConfig, yAxisRange?: YAxisRange): ChartConfiguration {
+    return {
+      type: 'line',
+      data: {
+        datasets: [
+          this.createDataset(
+            'Actual profit BB/100',
+            data.actualBB100,
+            CHART_COLORS.ACTUAL_PROFIT,
+            `rgba(34, 197, 94, ${CHART_COLORS.BACKGROUND_ALPHA})`
+          ),
+          this.createDataset(
+            'Showdown BB/100',
+            data.showdownBB100,
+            CHART_COLORS.SHOWDOWN_PROFIT,
+            `rgba(59, 130, 246, ${CHART_COLORS.BACKGROUND_ALPHA})`
+          ),
+          this.createDataset(
+            'No Showdown BB/100',
+            data.noShowdownBB100,
             CHART_COLORS.NO_SHOWDOWN_PROFIT,
             `rgba(239, 68, 68, ${CHART_COLORS.BACKGROUND_ALPHA})`
           )
@@ -305,6 +367,26 @@ export class ChartGenerator {
         finalValues[`${position} Actual (${handCount} hands)`] = this.getLastValue(positionData.actualProfit);
         finalValues[`${position} Showdown`] = this.getLastValue(positionData.showdownProfit);
         finalValues[`${position} No Showdown`] = this.getLastValue(positionData.noShowdownProfit);
+      }
+    });
+    
+    return finalValues;
+  }
+
+  /**
+   * Extract final values for position BB/100 chart
+   */
+  private extractPositionBB100FinalValues(data: CompletePositionBB100ChartData): Record<string, number> {
+    const finalValues: Record<string, number> = {};
+    
+    Object.entries(data).forEach(([positionKey, positionData]: [string, PositionBB100ChartData]) => {
+      const position = positionData.position;
+      const handCount = positionData.actualBB100.length;
+      
+      if (handCount > 0) {
+        finalValues[`${position} Actual BB/100 (${handCount} hands)`] = this.getLastValue(positionData.actualBB100);
+        finalValues[`${position} Showdown BB/100`] = this.getLastValue(positionData.showdownBB100);
+        finalValues[`${position} No Showdown BB/100`] = this.getLastValue(positionData.noShowdownBB100);
       }
     });
     
@@ -1676,6 +1758,176 @@ export class ChartGenerator {
     ctx.fillText('No hands played in this position', x + width / 2, y + height / 2 + 15);
     
     ctx.restore();
+  }
+
+  /**
+   * Render position BB/100 analysis chart with 7 vertical subcharts
+   */
+  private async renderPositionBB100AnalysisChart(
+    positionData: CompletePositionBB100ChartData,
+    config: ChartConfig
+  ): Promise<string> {
+    await ensureDirectoryExists(this.outputDir);
+
+    // Create high-resolution canvas - taller for 7 vertical charts
+    const chartHeight = config.height * 1.5; // Make it taller for 7 subcharts
+    const canvas = createCanvas(config.width, chartHeight);
+    const ctx = canvas.getContext('2d');
+
+    // Draw white background
+    ctx.fillStyle = CHARTS.BACKGROUND_COLOR;
+    ctx.fillRect(0, 0, config.width, chartHeight);
+
+    // Define positions and their display order
+    const positions = [
+      { key: 'overall', label: 'Overall' },
+      { key: 'utg', label: 'UTG' },
+      { key: 'hj', label: 'HJ' },
+      { key: 'co', label: 'CO' },
+      { key: 'btn', label: 'BTN' },
+      { key: 'sb', label: 'SB' },
+      { key: 'bb', label: 'BB' }
+    ];
+
+    // Draw main title
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 32px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Position-Specific BB/100 Trend Analysis', config.width / 2, 50);
+
+    // Calculate chart dimensions for each section
+    const chartTopMargin = 80;
+    const availableHeight = chartHeight - chartTopMargin - 40; // 40px bottom margin
+    const sectionHeight = Math.floor(availableHeight / 7); // 7 positions
+    const chartWidth = config.width - 40; // 20px margin on each side
+    const chartLeftMargin = 20;
+
+    // Render each position chart
+    for (let i = 0; i < positions.length; i++) {
+      const position = positions[i];
+      const positionChartData = positionData[position.key as keyof CompletePositionBB100ChartData];
+      const y = chartTopMargin + i * sectionHeight;
+
+      if (positionChartData && positionChartData.actualBB100.length > 0) {
+        await this.renderPositionBB100Section(
+          ctx,
+          positionChartData,
+          position.label,
+          chartLeftMargin,
+          y,
+          chartWidth,
+          sectionHeight
+        );
+      } else {
+        // Draw "No data" message for positions with no hands
+        this.drawNoDataMessage(ctx, position.label, chartLeftMargin, y, chartWidth, sectionHeight);
+      }
+
+      // Draw separator line (except after the last chart)
+      if (i < positions.length - 1) {
+        this.drawSectionSeparator(ctx, y + sectionHeight - 5, config.width);
+      }
+    }
+
+    const filePath = path.join(this.outputDir, config.fileName);
+    await this.saveChart(canvas, filePath);
+    return filePath;
+  }
+
+  /**
+   * Render a single position BB/100 chart section
+   */
+  private async renderPositionBB100Section(
+    ctx: any,
+    data: PositionBB100ChartData,
+    positionLabel: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): Promise<void> {
+    // Save the current context state
+    ctx.save();
+    
+    // Set clipping region for this chart section
+    ctx.beginPath();
+    ctx.rect(x, y, width, height);
+    ctx.clip();
+    
+    // Translate to the chart section position
+    ctx.translate(x, y);
+    
+    // Create a temporary canvas for the position chart
+    const tempCanvas = createCanvas(width, height);
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    // Draw white background
+    tempCtx.fillStyle = CHARTS.BACKGROUND_COLOR;
+    tempCtx.fillRect(0, 0, width, height);
+    
+    // Calculate optimal Y-axis range for BB/100 data
+    const yAxisRange = this.calculateOptimalBB100YAxisRange(data);
+    
+    // Create chart configuration for position BB/100
+    const positionConfig = this.buildPositionBB100ChartConfiguration(data, {
+      width,
+      height,
+      title: `${positionLabel} (${data.actualBB100.length} hands)`,
+      xAxisLabel: 'Hands',
+      yAxisLabel: 'BB/100',
+      fileName: 'temp'
+    }, yAxisRange);
+    
+    // Create and render the Chart.js chart
+    const chart = new Chart(tempCtx as any, positionConfig);
+    
+    // Wait for chart to render
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Draw the chart onto the main canvas
+    ctx.drawImage(tempCanvas, 0, 0);
+    
+    // Clean up
+    chart.destroy();
+    
+    // Restore the context state
+    ctx.restore();
+  }
+
+  /**
+   * Calculate optimal Y-axis range for position BB/100 data
+   */
+  private calculateOptimalBB100YAxisRange(data: PositionBB100ChartData): YAxisRange {
+    const allValues = [
+      ...data.actualBB100.map(point => point.value),
+      ...data.showdownBB100.map(point => point.value),
+      ...data.noShowdownBB100.map(point => point.value)
+    ];
+
+    if (allValues.length === 0) {
+      return { min: -10, max: 10 };
+    }
+
+    const min = Math.min(...allValues);
+    const max = Math.max(...allValues);
+    
+    // If all values are close to zero, set reasonable default range
+    if (Math.abs(max - min) < 1) {
+      const center = (max + min) / 2;
+      return {
+        min: center - 5,
+        max: center + 5
+      };
+    }
+
+    // Add 20% padding to the actual range for better visualization
+    const range = max - min;
+    const padding = range * 0.2;
+    
+    return {
+      min: Math.floor((min - padding) * 10) / 10,
+      max: Math.ceil((max + padding) * 10) / 10
+    };
   }
 
 } 

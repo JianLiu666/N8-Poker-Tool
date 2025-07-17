@@ -156,6 +156,24 @@ export interface FinalStatistics {
   statistics: StatisticsData;
 }
 
+// Position-specific profit trend analysis types
+export interface PositionProfitChartData {
+  position: string;
+  actualProfit: ChartDataPoint[];
+  showdownProfit: ChartDataPoint[];
+  noShowdownProfit: ChartDataPoint[];
+}
+
+export interface CompletePositionProfitChartData {
+  overall: PositionProfitChartData;
+  utg: PositionProfitChartData;
+  hj: PositionProfitChartData;
+  co: PositionProfitChartData;
+  btn: PositionProfitChartData;
+  sb: PositionProfitChartData;
+  bb: PositionProfitChartData;
+}
+
 
 
 // Street-based profit statistics for position analysis

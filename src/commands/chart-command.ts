@@ -9,6 +9,7 @@ import { createError } from '../utils';
 interface ChartResults {
   profitAnalysisResult: any;
   streetAnalysisResult: any;
+  positionProfitAnalysisResult: any;
 }
 
 export class ChartCommand {
@@ -45,7 +46,8 @@ export class ChartCommand {
       const chartData = this.calculateChartData(hands);
       const streetProfitData = this.chartCalculator.calculateStreetProfitAnalysisChartData(hands);
       const actionAnalysisData = this.chartCalculator.calculateActionAnalysisChartData(hands);
-      const chartResults = await this.generateCharts(chartData, streetProfitData, actionAnalysisData);
+      const positionProfitData = this.chartCalculator.calculatePositionProfitData(hands);
+      const chartResults = await this.generateCharts(chartData, streetProfitData, actionAnalysisData, positionProfitData);
       const statistics = this.chartCalculator.getFinalStatistics(chartData.profitData, chartData.bb100Data);
 
       // Output results
@@ -96,9 +98,9 @@ export class ChartCommand {
   }
 
   /**
-   * Generate profit analysis and street analysis charts
+   * Generate profit analysis, street analysis, and position profit analysis charts
    */
-  private async generateCharts(chartData: { profitData: any; bb100Data: any }, streetProfitData: any, actionAnalysisData: any): Promise<ChartResults> {
+  private async generateCharts(chartData: { profitData: any; bb100Data: any }, streetProfitData: any, actionAnalysisData: any, positionProfitData: any): Promise<ChartResults> {
     const interval = this.options.interval || CHARTS.DEFAULT_SAMPLING_INTERVAL;
     
     console.log(`${LOG_EMOJIS.CHART} Generating Profit Analysis chart (interval: ${interval} hands)...`);
@@ -107,7 +109,10 @@ export class ChartCommand {
     console.log(`${LOG_EMOJIS.CHART} Generating Street Analysis chart (high resolution)...`);
     const streetAnalysisResult = await this.chartGenerator.generateStreetAnalysisChart(actionAnalysisData, streetProfitData);
 
-    return { profitAnalysisResult, streetAnalysisResult };
+    console.log(`${LOG_EMOJIS.CHART} Generating Position-Specific Profit Analysis chart...`);
+    const positionProfitAnalysisResult = await this.chartGenerator.generatePositionProfitAnalysisChart(positionProfitData);
+
+    return { profitAnalysisResult, streetAnalysisResult, positionProfitAnalysisResult };
   }
 
 
@@ -119,6 +124,7 @@ export class ChartCommand {
     console.log(`${LOG_EMOJIS.CHART} Charts generated successfully:`);
     console.log(`   - Profit Analysis chart: ${chartResults.profitAnalysisResult.filePath}`);
     console.log(`   - Street Analysis chart: ${chartResults.streetAnalysisResult.filePath}`);
+    console.log(`   - Position-Specific Profit Analysis chart: ${chartResults.positionProfitAnalysisResult.filePath}`);
     
     this.logStatistics(statistics);
   }
@@ -145,5 +151,6 @@ export class ChartCommand {
     
     console.log(`${LOG_EMOJIS.INFO} Profit Analysis chart shows profit trends and BB/100 analysis`);
     console.log(`${LOG_EMOJIS.INFO} Street Analysis chart shows action analysis and profit analysis by position for each stage`);
+    console.log(`${LOG_EMOJIS.INFO} Position-Specific Profit Analysis chart shows profit trends for each position with 7 vertical subcharts`);
   }
 } 

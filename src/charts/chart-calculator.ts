@@ -10,7 +10,9 @@ import {
   CompleteStreetProfitChartData,
   ActionAnalysisPositionStats,
   StreetActionAnalysisData,
-  CompleteActionAnalysisChartData
+  CompleteActionAnalysisChartData,
+  PositionProfitChartData,
+  CompletePositionProfitChartData
 } from '../types';
 import { CHARTS, POKER } from '../constants';
 import { roundToDecimals, isShowdownResult } from '../utils';
@@ -39,6 +41,27 @@ export class ChartCalculator {
    */
   calculateBB100Data(hands: PokerHand[], smoothInterval: number = CHARTS.DEFAULT_BB100_INTERVAL): BB100ChartData {
     return this.processBB100DataWithSmoothing(hands, smoothInterval);
+  }
+
+  /**
+   * Calculate position-specific profit trend data for vertical layout chart
+   */
+  calculatePositionProfitData(hands: PokerHand[], smoothInterval: number = CHARTS.DEFAULT_SAMPLING_INTERVAL): CompletePositionProfitChartData {
+    const positions = this.getAllPositions();
+    
+    // Calculate overall data
+    const overall = this.calculateSinglePositionProfitData(hands, null, 'Overall', smoothInterval);
+    
+    // Calculate position-specific data
+    const positionData: any = { overall };
+    
+    positions.forEach(position => {
+      const positionHands = hands.filter(hand => hand.hero_position === position);
+      const key = position.toLowerCase();
+      positionData[key] = this.calculateSinglePositionProfitData(positionHands, position, position, smoothInterval);
+    });
+    
+    return positionData as CompletePositionProfitChartData;
   }
 
 
@@ -300,6 +323,73 @@ export class ChartCalculator {
       totalHands,
       statistics: this.buildStatistics(profitData, bb100Data, profitIndex, bb100Index)
     };
+  }
+
+  // ===== POSITION-SPECIFIC CALCULATION METHODS =====
+
+  /**
+   * Calculate profit trend data for a single position
+   */
+  private calculateSinglePositionProfitData(
+    hands: PokerHand[], 
+    position: PokerPosition | null, 
+    positionLabel: string,
+    smoothInterval: number
+  ): PositionProfitChartData {
+    const result: PositionProfitChartData = {
+      position: positionLabel,
+      actualProfit: [],
+      showdownProfit: [],
+      noShowdownProfit: []
+    };
+
+    let cumulativeStats = {
+      actual: 0,
+      showdown: 0,
+      noShowdown: 0
+    };
+
+    let intervalAccumulator = {
+      actual: 0,
+      showdown: 0,
+      noShowdown: 0,
+      count: 0
+    };
+
+    hands.forEach((hand, index) => {
+      const handNumber = index + 1;
+      const profit = hand.hero_profit;
+      
+      // Update cumulative stats
+      cumulativeStats.actual += profit;
+      
+      if (isShowdownResult(hand.hero_hand_result)) {
+        cumulativeStats.showdown += profit;
+      } else {
+        cumulativeStats.noShowdown += profit;
+      }
+      
+      // Accumulate for interval averaging
+      intervalAccumulator.actual += cumulativeStats.actual;
+      intervalAccumulator.showdown += cumulativeStats.showdown;
+      intervalAccumulator.noShowdown += cumulativeStats.noShowdown;
+      intervalAccumulator.count++;
+
+      // Check if we should create a data point
+      if (this.shouldCreateDataPoint(handNumber, smoothInterval, index, hands.length)) {
+        const avgActual = intervalAccumulator.actual / intervalAccumulator.count;
+        const avgShowdown = intervalAccumulator.showdown / intervalAccumulator.count;
+        const avgNoShowdown = intervalAccumulator.noShowdown / intervalAccumulator.count;
+
+        result.actualProfit.push(this.createDataPoint(handNumber, avgActual, hand.hand_start_time));
+        result.showdownProfit.push(this.createDataPoint(handNumber, avgShowdown, hand.hand_start_time));
+        result.noShowdownProfit.push(this.createDataPoint(handNumber, avgNoShowdown, hand.hand_start_time));
+        
+        intervalAccumulator = { actual: 0, showdown: 0, noShowdown: 0, count: 0 };
+      }
+    });
+
+    return result;
   }
 
   // ===== PRIVATE PROCESSING METHODS =====

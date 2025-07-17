@@ -13,7 +13,9 @@ import {
   StreetProfitPositionStats,
   CompleteActionAnalysisChartData,
   StreetActionAnalysisData,
-  ActionAnalysisPositionStats
+  ActionAnalysisPositionStats,
+  CompletePositionProfitChartData,
+  PositionProfitChartData
 } from '../types';
 import { CHARTS, CHART_COLORS, CHART_LAYOUT, POKER } from '../constants';
 import { formatTimestamp, ensureDirectoryExists } from '../utils';
@@ -21,7 +23,7 @@ import { formatTimestamp, ensureDirectoryExists } from '../utils';
 // Register Chart.js components
 Chart.register(...registerables);
 
-type ChartType = 'profit-analysis' | 'street-analysis';
+type ChartType = 'profit-analysis' | 'street-analysis' | 'position-profit-analysis';
 
 /**
  * Chart generator class responsible for creating visual charts from poker data
@@ -36,8 +38,27 @@ export class ChartGenerator {
 
   // ===== PUBLIC CHART GENERATION METHODS =====
 
-
-
+  /**
+   * Generate position-specific profit trend analysis chart with 7 vertical subcharts
+   */
+  async generatePositionProfitAnalysisChart(
+    positionData: CompletePositionProfitChartData
+  ): Promise<ChartGenerationResult> {
+    const config = this.createChartConfig('position-profit-analysis');
+    const finalValues = this.extractPositionProfitFinalValues(positionData);
+    
+    // Create position profit analysis chart
+    const filePath = await this.renderPositionProfitAnalysisChart(positionData, config);
+    
+    // Calculate total hands from overall data
+    const totalHands = positionData.overall.actualProfit.length;
+    
+    return {
+      filePath,
+      totalHands,
+      finalValues
+    };
+  }
 
   /**
    * Generate street analysis chart with Action Analysis on left and Street Profit Analysis on right
@@ -106,6 +127,12 @@ export class ChartGenerator {
         xAxisLabel: 'Position',
         yAxisLabel: 'Analysis',
         fileName: `poker-street-analysis-chart-${timestamp}`
+      },
+      'position-profit-analysis': {
+        title: 'Position-Specific Profit Trend Analysis',
+        xAxisLabel: 'Hands',
+        yAxisLabel: 'Cumulative Profit',
+        fileName: `poker-position-profit-analysis-chart-${timestamp}`
       }
     };
 
@@ -149,6 +176,38 @@ export class ChartGenerator {
             data.allHandsActual,
             CHART_COLORS.ACTUAL_PROFIT,
             `rgba(34, 197, 94, ${CHART_COLORS.BACKGROUND_ALPHA})`
+          )
+        ]
+      },
+      options: this.createChartOptions(config, yAxisRange)
+    };
+  }
+
+  /**
+   * Build position profit chart configuration for a single position
+   */
+  private buildPositionProfitChartConfiguration(data: PositionProfitChartData, config: ChartConfig, yAxisRange?: YAxisRange): ChartConfiguration {
+    return {
+      type: 'line',
+      data: {
+        datasets: [
+          this.createDataset(
+            'Actual profit',
+            data.actualProfit,
+            CHART_COLORS.ACTUAL_PROFIT,
+            `rgba(34, 197, 94, ${CHART_COLORS.BACKGROUND_ALPHA})`
+          ),
+          this.createDataset(
+            'Showdown Profit',
+            data.showdownProfit,
+            CHART_COLORS.SHOWDOWN_PROFIT,
+            `rgba(59, 130, 246, ${CHART_COLORS.BACKGROUND_ALPHA})`
+          ),
+          this.createDataset(
+            'No Showdown Profit',
+            data.noShowdownProfit,
+            CHART_COLORS.NO_SHOWDOWN_PROFIT,
+            `rgba(239, 68, 68, ${CHART_COLORS.BACKGROUND_ALPHA})`
           )
         ]
       },
@@ -231,6 +290,26 @@ export class ChartGenerator {
 
 
 
+
+  /**
+   * Extract final values for position profit chart
+   */
+  private extractPositionProfitFinalValues(data: CompletePositionProfitChartData): Record<string, number> {
+    const finalValues: Record<string, number> = {};
+    
+    Object.entries(data).forEach(([positionKey, positionData]: [string, PositionProfitChartData]) => {
+      const position = positionData.position;
+      const handCount = positionData.actualProfit.length;
+      
+      if (handCount > 0) {
+        finalValues[`${position} Actual (${handCount} hands)`] = this.getLastValue(positionData.actualProfit);
+        finalValues[`${position} Showdown`] = this.getLastValue(positionData.showdownProfit);
+        finalValues[`${position} No Showdown`] = this.getLastValue(positionData.noShowdownProfit);
+      }
+    });
+    
+    return finalValues;
+  }
 
   /**
    * Extract final values for street profit chart
@@ -1431,6 +1510,171 @@ export class ChartGenerator {
     chart.destroy();
     
     // Restore the context state
+    ctx.restore();
+  }
+
+  /**
+   * Render position profit analysis chart with 7 vertical subcharts
+   */
+  private async renderPositionProfitAnalysisChart(
+    positionData: CompletePositionProfitChartData,
+    config: ChartConfig
+  ): Promise<string> {
+    await ensureDirectoryExists(this.outputDir);
+
+    // Create high-resolution canvas - taller for 7 vertical charts
+    const chartHeight = config.height * 1.5; // Make it taller for 7 subcharts
+    const canvas = createCanvas(config.width, chartHeight);
+    const ctx = canvas.getContext('2d');
+
+    // Draw white background
+    ctx.fillStyle = CHARTS.BACKGROUND_COLOR;
+    ctx.fillRect(0, 0, config.width, chartHeight);
+
+    // Define positions and their display order
+    const positions = [
+      { key: 'overall', label: 'Overall' },
+      { key: 'utg', label: 'UTG' },
+      { key: 'hj', label: 'HJ' },
+      { key: 'co', label: 'CO' },
+      { key: 'btn', label: 'BTN' },
+      { key: 'sb', label: 'SB' },
+      { key: 'bb', label: 'BB' }
+    ];
+
+    // Draw main title
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 32px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Position-Specific Profit Trend Analysis', config.width / 2, 50);
+
+    // Calculate chart dimensions for each section
+    const chartTopMargin = 80;
+    const availableHeight = chartHeight - chartTopMargin - 40; // 40px bottom margin
+    const sectionHeight = Math.floor(availableHeight / 7); // 7 positions
+    const chartWidth = config.width - 40; // 20px margin on each side
+    const chartLeftMargin = 20;
+
+    // Render each position chart
+    for (let i = 0; i < positions.length; i++) {
+      const position = positions[i];
+      const positionChartData = positionData[position.key as keyof CompletePositionProfitChartData];
+      const y = chartTopMargin + i * sectionHeight;
+
+      if (positionChartData && positionChartData.actualProfit.length > 0) {
+        await this.renderPositionProfitSection(
+          ctx,
+          positionChartData,
+          position.label,
+          chartLeftMargin,
+          y,
+          chartWidth,
+          sectionHeight
+        );
+      } else {
+        // Draw "No data" message for positions with no hands
+        this.drawNoDataMessage(ctx, position.label, chartLeftMargin, y, chartWidth, sectionHeight);
+      }
+
+      // Draw separator line (except after the last chart)
+      if (i < positions.length - 1) {
+        this.drawSectionSeparator(ctx, y + sectionHeight - 5, config.width);
+      }
+    }
+
+    const filePath = path.join(this.outputDir, config.fileName);
+    await this.saveChart(canvas, filePath);
+    return filePath;
+  }
+
+  /**
+   * Render a single position profit chart section
+   */
+  private async renderPositionProfitSection(
+    ctx: any,
+    data: PositionProfitChartData,
+    positionLabel: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): Promise<void> {
+    // Save the current context state
+    ctx.save();
+    
+    // Set clipping region for this chart section
+    ctx.beginPath();
+    ctx.rect(x, y, width, height);
+    ctx.clip();
+    
+    // Translate to the chart section position
+    ctx.translate(x, y);
+    
+    // Create a temporary canvas for the position chart
+    const tempCanvas = createCanvas(width, height);
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    // Draw white background
+    tempCtx.fillStyle = CHARTS.BACKGROUND_COLOR;
+    tempCtx.fillRect(0, 0, width, height);
+    
+    // Create chart configuration for position profit
+    const positionConfig = this.buildPositionProfitChartConfiguration(data, {
+      width,
+      height,
+      title: `${positionLabel} (${data.actualProfit.length} hands)`,
+      xAxisLabel: 'Hands',
+      yAxisLabel: 'Cumulative Profit',
+      fileName: 'temp'
+    });
+    
+    // Create and render the Chart.js chart
+    const chart = new Chart(tempCtx as any, positionConfig);
+    
+    // Wait for chart to render
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Draw the chart onto the main canvas
+    ctx.drawImage(tempCanvas, 0, 0);
+    
+    // Clean up
+    chart.destroy();
+    
+    // Restore the context state
+    ctx.restore();
+  }
+
+  /**
+   * Draw "No data" message for positions with no hands
+   */
+  private drawNoDataMessage(
+    ctx: any,
+    positionLabel: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): void {
+    ctx.save();
+    
+    // Draw background
+    ctx.fillStyle = '#f8f9fa';
+    ctx.fillRect(x, y, width, height);
+    
+    // Draw border
+    ctx.strokeStyle = '#dee2e6';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, width, height);
+    
+    // Draw title and message
+    ctx.fillStyle = '#6c757d';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${positionLabel}`, x + width / 2, y + height / 2 - 10);
+    
+    ctx.font = '14px Arial';
+    ctx.fillText('No hands played in this position', x + width / 2, y + height / 2 + 15);
+    
     ctx.restore();
   }
 

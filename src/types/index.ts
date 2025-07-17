@@ -105,19 +105,6 @@ export interface ChartDataPoint {
   timestamp: string;
 }
 
-export interface ProfitChartData {
-  allHandsWithRake: ChartDataPoint[];
-  allHandsActual: ChartDataPoint[];
-  showdownOnly: ChartDataPoint[];
-  noShowdownOnly: ChartDataPoint[];
-}
-
-export interface BB100ChartData {
-  allHandsWithRakeBB100: ChartDataPoint[];
-  allHandsActualBB100: ChartDataPoint[];
-  showdownOnlyBB100: ChartDataPoint[];
-  noShowdownOnlyBB100: ChartDataPoint[];
-}
 
 export interface ChartGenerationResult {
   filePath: string;

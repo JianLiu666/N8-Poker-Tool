@@ -234,6 +234,21 @@ export interface CompleteActionAnalysisChartData {
   showdown: StreetActionAnalysisData; // For showdown win% instead of actions
 }
 
+// Basic chart data types for profit and BB100 charts
+export interface ProfitChartData {
+  allHandsWithRake: ChartDataPoint[];
+  allHandsActual: ChartDataPoint[];
+  showdownOnly: ChartDataPoint[];
+  noShowdownOnly: ChartDataPoint[];
+}
+
+export interface BB100ChartData {
+  allHandsWithRakeBB100: ChartDataPoint[];
+  allHandsActualBB100: ChartDataPoint[];
+  showdownOnlyBB100: ChartDataPoint[];
+  noShowdownOnlyBB100: ChartDataPoint[];
+}
+
 // ================== Parsing Result Interfaces ==================
 
 export interface ParseHandResult {

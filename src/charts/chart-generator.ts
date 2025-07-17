@@ -1534,10 +1534,10 @@ export class ChartGenerator {
    */
   private getAllBB100Values(data: BB100ChartData): number[] {
     return [
-      ...data.allHandsWithRakeBB100.map(point => point.value),
-      ...data.allHandsActualBB100.map(point => point.value),
-      ...data.showdownOnlyBB100.map(point => point.value),
-      ...data.noShowdownOnlyBB100.map(point => point.value)
+      ...data.allHandsWithRakeBB100.map((point: ChartDataPoint) => point.value),
+      ...data.allHandsActualBB100.map((point: ChartDataPoint) => point.value),
+      ...data.showdownOnlyBB100.map((point: ChartDataPoint) => point.value),
+      ...data.noShowdownOnlyBB100.map((point: ChartDataPoint) => point.value)
     ];
   }
 

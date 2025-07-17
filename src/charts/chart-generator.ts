@@ -17,7 +17,8 @@ import {
   CompletePositionProfitChartData,
   PositionProfitChartData,
   CompletePositionBB100ChartData,
-  PositionBB100ChartData
+  PositionBB100ChartData,
+  CombinedPositionChartData
 } from '../types';
 import { CHARTS, CHART_COLORS, CHART_LAYOUT, POKER } from '../constants';
 import { formatTimestamp, ensureDirectoryExists } from '../utils';
@@ -25,7 +26,7 @@ import { formatTimestamp, ensureDirectoryExists } from '../utils';
 // Register Chart.js components
 Chart.register(...registerables);
 
-type ChartType = 'profit-analysis' | 'street-analysis' | 'position-profit-analysis' | 'position-bb100-analysis';
+type ChartType = 'profit-analysis' | 'street-analysis' | 'position-profit-analysis' | 'position-bb100-analysis' | 'combined-position-analysis';
 
 /**
  * Chart generator class responsible for creating visual charts from poker data
@@ -76,6 +77,28 @@ export class ChartGenerator {
     
     // Calculate total hands from overall data
     const totalHands = positionData.overall.actualBB100.length;
+    
+    return {
+      filePath,
+      totalHands,
+      finalValues
+    };
+  }
+
+  /**
+   * Generate combined position analysis chart with profit (left) and BB/100 (right)
+   */
+  async generateCombinedPositionAnalysisChart(
+    combinedData: CombinedPositionChartData
+  ): Promise<ChartGenerationResult> {
+    const config = this.createChartConfig('combined-position-analysis');
+    const finalValues = this.extractCombinedPositionFinalValues(combinedData);
+    
+    // Create combined position analysis chart
+    const filePath = await this.renderCombinedPositionAnalysisChart(combinedData, config);
+    
+    // Calculate total hands from profit data
+    const totalHands = combinedData.profitData.overall.actualProfit.length;
     
     return {
       filePath,
@@ -163,6 +186,12 @@ export class ChartGenerator {
         xAxisLabel: 'Hands',
         yAxisLabel: 'BB/100',
         fileName: `poker-position-bb100-analysis-chart-${timestamp}`
+      },
+      'combined-position-analysis': {
+        title: 'Position-Specific Profit & BB/100 Analysis',
+        xAxisLabel: 'Hands',
+        yAxisLabel: 'Analysis',
+        fileName: `poker-combined-position-analysis-chart-${timestamp}`
       }
     };
 
@@ -217,30 +246,42 @@ export class ChartGenerator {
    * Build position profit chart configuration for a single position
    */
   private buildPositionProfitChartConfiguration(data: PositionProfitChartData, config: ChartConfig, yAxisRange?: YAxisRange): ChartConfiguration {
+    const datasets = [
+      this.createDataset(
+        'Actual profit',
+        data.actualProfit,
+        CHART_COLORS.ACTUAL_PROFIT,
+        `rgba(34, 197, 94, ${CHART_COLORS.BACKGROUND_ALPHA})`
+      ),
+      this.createDataset(
+        'Showdown Profit',
+        data.showdownProfit,
+        CHART_COLORS.SHOWDOWN_PROFIT,
+        `rgba(59, 130, 246, ${CHART_COLORS.BACKGROUND_ALPHA})`
+      ),
+      this.createDataset(
+        'No Showdown Profit',
+        data.noShowdownProfit,
+        CHART_COLORS.NO_SHOWDOWN_PROFIT,
+        `rgba(239, 68, 68, ${CHART_COLORS.BACKGROUND_ALPHA})`
+      )
+    ];
+
+    // Add profit without rake line only for Overall position
+    if (data.position === 'Overall') {
+      datasets.unshift(
+        this.createDataset(
+          'Profit without rake',
+          data.profitWithoutRake,
+          CHART_COLORS.PROFIT_WITHOUT_RAKE,
+          'rgba(134, 239, 172, 0.05)'
+        )
+      );
+    }
+
     return {
       type: 'line',
-      data: {
-        datasets: [
-          this.createDataset(
-            'Actual profit',
-            data.actualProfit,
-            CHART_COLORS.ACTUAL_PROFIT,
-            `rgba(34, 197, 94, ${CHART_COLORS.BACKGROUND_ALPHA})`
-          ),
-          this.createDataset(
-            'Showdown Profit',
-            data.showdownProfit,
-            CHART_COLORS.SHOWDOWN_PROFIT,
-            `rgba(59, 130, 246, ${CHART_COLORS.BACKGROUND_ALPHA})`
-          ),
-          this.createDataset(
-            'No Showdown Profit',
-            data.noShowdownProfit,
-            CHART_COLORS.NO_SHOWDOWN_PROFIT,
-            `rgba(239, 68, 68, ${CHART_COLORS.BACKGROUND_ALPHA})`
-          )
-        ]
-      },
+      data: { datasets },
       options: this.createChartOptions(config, yAxisRange)
     };
   }
@@ -249,30 +290,42 @@ export class ChartGenerator {
    * Build position BB/100 chart configuration for a single position
    */
   private buildPositionBB100ChartConfiguration(data: PositionBB100ChartData, config: ChartConfig, yAxisRange?: YAxisRange): ChartConfiguration {
+    const datasets = [
+      this.createDataset(
+        'Actual profit BB/100',
+        data.actualBB100,
+        CHART_COLORS.ACTUAL_PROFIT,
+        `rgba(34, 197, 94, ${CHART_COLORS.BACKGROUND_ALPHA})`
+      ),
+      this.createDataset(
+        'Showdown BB/100',
+        data.showdownBB100,
+        CHART_COLORS.SHOWDOWN_PROFIT,
+        `rgba(59, 130, 246, ${CHART_COLORS.BACKGROUND_ALPHA})`
+      ),
+      this.createDataset(
+        'No Showdown BB/100',
+        data.noShowdownBB100,
+        CHART_COLORS.NO_SHOWDOWN_PROFIT,
+        `rgba(239, 68, 68, ${CHART_COLORS.BACKGROUND_ALPHA})`
+      )
+    ];
+
+    // Add profit without rake BB/100 line only for Overall position
+    if (data.position === 'Overall') {
+      datasets.unshift(
+        this.createDataset(
+          'Profit without rake BB/100',
+          data.profitWithoutRakeBB100,
+          CHART_COLORS.PROFIT_WITHOUT_RAKE,
+          'rgba(134, 239, 172, 0.05)'
+        )
+      );
+    }
+
     return {
       type: 'line',
-      data: {
-        datasets: [
-          this.createDataset(
-            'Actual profit BB/100',
-            data.actualBB100,
-            CHART_COLORS.ACTUAL_PROFIT,
-            `rgba(34, 197, 94, ${CHART_COLORS.BACKGROUND_ALPHA})`
-          ),
-          this.createDataset(
-            'Showdown BB/100',
-            data.showdownBB100,
-            CHART_COLORS.SHOWDOWN_PROFIT,
-            `rgba(59, 130, 246, ${CHART_COLORS.BACKGROUND_ALPHA})`
-          ),
-          this.createDataset(
-            'No Showdown BB/100',
-            data.noShowdownBB100,
-            CHART_COLORS.NO_SHOWDOWN_PROFIT,
-            `rgba(239, 68, 68, ${CHART_COLORS.BACKGROUND_ALPHA})`
-          )
-        ]
-      },
+      data: { datasets },
       options: this.createChartOptions(config, yAxisRange)
     };
   }
@@ -387,6 +440,47 @@ export class ChartGenerator {
         finalValues[`${position} Actual BB/100 (${handCount} hands)`] = this.getLastValue(positionData.actualBB100);
         finalValues[`${position} Showdown BB/100`] = this.getLastValue(positionData.showdownBB100);
         finalValues[`${position} No Showdown BB/100`] = this.getLastValue(positionData.noShowdownBB100);
+      }
+    });
+    
+    return finalValues;
+  }
+
+  /**
+   * Extract final values for combined position chart
+   */
+  private extractCombinedPositionFinalValues(data: CombinedPositionChartData): Record<string, number> {
+    const finalValues: Record<string, number> = {};
+    
+    // Extract profit data final values
+    Object.entries(data.profitData).forEach(([positionKey, positionData]: [string, PositionProfitChartData]) => {
+      const position = positionData.position;
+      const handCount = positionData.actualProfit.length;
+      
+      if (handCount > 0) {
+        finalValues[`${position} Actual Profit (${handCount} hands)`] = this.getLastValue(positionData.actualProfit);
+        finalValues[`${position} Showdown Profit`] = this.getLastValue(positionData.showdownProfit);
+        finalValues[`${position} No Showdown Profit`] = this.getLastValue(positionData.noShowdownProfit);
+        
+        if (position === 'Overall') {
+          finalValues[`${position} Profit without rake`] = this.getLastValue(positionData.profitWithoutRake);
+        }
+      }
+    });
+    
+    // Extract BB/100 data final values  
+    Object.entries(data.bb100Data).forEach(([positionKey, positionData]: [string, PositionBB100ChartData]) => {
+      const position = positionData.position;
+      const handCount = positionData.actualBB100.length;
+      
+      if (handCount > 0) {
+        finalValues[`${position} Actual BB/100`] = this.getLastValue(positionData.actualBB100);
+        finalValues[`${position} Showdown BB/100`] = this.getLastValue(positionData.showdownBB100);
+        finalValues[`${position} No Showdown BB/100`] = this.getLastValue(positionData.noShowdownBB100);
+        
+        if (position === 'Overall') {
+          finalValues[`${position} Profit without rake BB/100`] = this.getLastValue(positionData.profitWithoutRakeBB100);
+        }
       }
     });
     
@@ -1928,6 +2022,117 @@ export class ChartGenerator {
       min: Math.floor((min - padding) * 10) / 10,
       max: Math.ceil((max + padding) * 10) / 10
     };
+  }
+
+  /**
+   * Render combined position analysis chart with profit (left) and BB/100 (right)
+   */
+  private async renderCombinedPositionAnalysisChart(
+    combinedData: CombinedPositionChartData,
+    config: ChartConfig
+  ): Promise<string> {
+    await ensureDirectoryExists(this.outputDir);
+
+    // Create high-resolution canvas - taller for 7 vertical charts
+    const chartHeight = config.height * 1.5; // Make it taller for 7 subcharts
+    const canvas = createCanvas(config.width, chartHeight);
+    const ctx = canvas.getContext('2d');
+
+    // Draw white background
+    ctx.fillStyle = CHARTS.BACKGROUND_COLOR;
+    ctx.fillRect(0, 0, config.width, chartHeight);
+
+    // Define positions and their display order
+    const positions = [
+      { key: 'overall', label: 'Overall' },
+      { key: 'utg', label: 'UTG' },
+      { key: 'hj', label: 'HJ' },
+      { key: 'co', label: 'CO' },
+      { key: 'btn', label: 'BTN' },
+      { key: 'sb', label: 'SB' },
+      { key: 'bb', label: 'BB' }
+    ];
+
+    // Define dimensions for left and right halves
+    const halfWidth = config.width / 2;
+    const separatorWidth = 4;
+    const leftWidth = halfWidth - separatorWidth / 2;
+    const rightWidth = halfWidth - separatorWidth / 2;
+    const rightStartX = halfWidth + separatorWidth / 2;
+
+    // Draw main title
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 32px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Position-Specific Profit & BB/100 Analysis', config.width / 2, 50);
+
+    // Draw section titles
+    ctx.font = 'bold 18px Arial';
+    ctx.fillText('Profit Trend Analysis', leftWidth / 2, 80);
+    ctx.fillText('BB/100 Trend Analysis', rightStartX + rightWidth / 2, 80);
+
+    // Draw separator line
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.lineWidth = separatorWidth;
+    ctx.beginPath();
+    ctx.moveTo(halfWidth, 100);
+    ctx.lineTo(halfWidth, chartHeight - 20);
+    ctx.stroke();
+
+    // Calculate chart dimensions for each section
+    const chartTopMargin = 100;
+    const availableHeight = chartHeight - chartTopMargin - 40; // 40px bottom margin
+    const sectionHeight = Math.floor(availableHeight / 7); // 7 positions
+    const chartLeftMargin = 20;
+
+    // Render each position chart
+    for (let i = 0; i < positions.length; i++) {
+      const position = positions[i];
+      const profitData = combinedData.profitData[position.key as keyof CompletePositionProfitChartData];
+      const bb100Data = combinedData.bb100Data[position.key as keyof CompletePositionBB100ChartData];
+      const y = chartTopMargin + i * sectionHeight;
+
+      // Render profit chart (left side)
+      if (profitData && profitData.actualProfit.length > 0) {
+        await this.renderPositionProfitSection(
+          ctx,
+          profitData,
+          position.label,
+          chartLeftMargin,
+          y,
+          leftWidth - chartLeftMargin,
+          sectionHeight
+        );
+      } else {
+        // Draw "No data" message for positions with no hands
+        this.drawNoDataMessage(ctx, position.label, chartLeftMargin, y, leftWidth - chartLeftMargin, sectionHeight);
+      }
+
+      // Render BB/100 chart (right side)
+      if (bb100Data && bb100Data.actualBB100.length > 0) {
+        await this.renderPositionBB100Section(
+          ctx,
+          bb100Data,
+          position.label,
+          rightStartX,
+          y,
+          rightWidth,
+          sectionHeight
+        );
+      } else {
+        // Draw "No data" message for positions with no hands
+        this.drawNoDataMessage(ctx, position.label, rightStartX, y, rightWidth, sectionHeight);
+      }
+
+      // Draw separator line (except after the last chart)
+      if (i < positions.length - 1) {
+        this.drawSectionSeparator(ctx, y + sectionHeight - 5, config.width);
+      }
+    }
+
+    const filePath = path.join(this.outputDir, config.fileName);
+    await this.saveChart(canvas, filePath);
+    return filePath;
   }
 
 } 

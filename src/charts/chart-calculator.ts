@@ -14,7 +14,8 @@ import {
   PositionProfitChartData,
   CompletePositionProfitChartData,
   PositionBB100ChartData,
-  CompletePositionBB100ChartData
+  CompletePositionBB100ChartData,
+  CombinedPositionChartData
 } from '../types';
 import { CHARTS, POKER } from '../constants';
 import { roundToDecimals, isShowdownResult } from '../utils';
@@ -85,6 +86,19 @@ export class ChartCalculator {
     });
     
     return positionData as CompletePositionBB100ChartData;
+  }
+
+  /**
+   * Calculate combined position chart data (profit + BB/100)
+   */
+  calculateCombinedPositionData(hands: PokerHand[], smoothInterval: number = CHARTS.DEFAULT_SAMPLING_INTERVAL): CombinedPositionChartData {
+    const profitData = this.calculatePositionProfitData(hands, smoothInterval);
+    const bb100Data = this.calculatePositionBB100Data(hands, smoothInterval);
+    
+    return {
+      profitData,
+      bb100Data
+    };
   }
 
 
@@ -362,18 +376,21 @@ export class ChartCalculator {
     const result: PositionProfitChartData = {
       position: positionLabel,
       actualProfit: [],
+      profitWithoutRake: [],
       showdownProfit: [],
       noShowdownProfit: []
     };
 
     let cumulativeStats = {
       actual: 0,
+      withoutRake: 0,
       showdown: 0,
       noShowdown: 0
     };
 
     let intervalAccumulator = {
       actual: 0,
+      withoutRake: 0,
       showdown: 0,
       noShowdown: 0,
       count: 0
@@ -382,9 +399,14 @@ export class ChartCalculator {
     hands.forEach((hand, index) => {
       const handNumber = index + 1;
       const profit = hand.hero_profit;
+      const rake = hand.hero_rake;
+      
+      // Rake only exists when hero wins money
+      const adjustedRake = profit > 0 ? rake : 0;
       
       // Update cumulative stats
       cumulativeStats.actual += profit;
+      cumulativeStats.withoutRake += profit + adjustedRake;
       
       if (isShowdownResult(hand.hero_hand_result)) {
         cumulativeStats.showdown += profit;
@@ -394,6 +416,7 @@ export class ChartCalculator {
       
       // Accumulate for interval averaging
       intervalAccumulator.actual += cumulativeStats.actual;
+      intervalAccumulator.withoutRake += cumulativeStats.withoutRake;
       intervalAccumulator.showdown += cumulativeStats.showdown;
       intervalAccumulator.noShowdown += cumulativeStats.noShowdown;
       intervalAccumulator.count++;
@@ -401,14 +424,16 @@ export class ChartCalculator {
       // Check if we should create a data point
       if (this.shouldCreateDataPoint(handNumber, smoothInterval, index, hands.length)) {
         const avgActual = intervalAccumulator.actual / intervalAccumulator.count;
+        const avgWithoutRake = intervalAccumulator.withoutRake / intervalAccumulator.count;
         const avgShowdown = intervalAccumulator.showdown / intervalAccumulator.count;
         const avgNoShowdown = intervalAccumulator.noShowdown / intervalAccumulator.count;
 
         result.actualProfit.push(this.createDataPoint(handNumber, avgActual, hand.hand_start_time));
+        result.profitWithoutRake.push(this.createDataPoint(handNumber, avgWithoutRake, hand.hand_start_time));
         result.showdownProfit.push(this.createDataPoint(handNumber, avgShowdown, hand.hand_start_time));
         result.noShowdownProfit.push(this.createDataPoint(handNumber, avgNoShowdown, hand.hand_start_time));
         
-        intervalAccumulator = { actual: 0, showdown: 0, noShowdown: 0, count: 0 };
+        intervalAccumulator = { actual: 0, withoutRake: 0, showdown: 0, noShowdown: 0, count: 0 };
       }
     });
 
@@ -427,12 +452,14 @@ export class ChartCalculator {
     const result: PositionBB100ChartData = {
       position: positionLabel,
       actualBB100: [],
+      profitWithoutRakeBB100: [],
       showdownBB100: [],
       noShowdownBB100: []
     };
 
     let cumulativeStats = {
       actual: 0,
+      withoutRake: 0,
       showdown: 0,
       noShowdown: 0
     };
@@ -441,6 +468,7 @@ export class ChartCalculator {
 
     let intervalAccumulator = {
       bb100Actual: 0,
+      bb100WithoutRake: 0,
       bb100Showdown: 0,
       bb100NoShowdown: 0,
       count: 0
@@ -449,9 +477,14 @@ export class ChartCalculator {
     hands.forEach((hand, index) => {
       const handNumber = index + 1;
       const profit = hand.hero_profit;
+      const rake = hand.hero_rake;
+      
+      // Rake only exists when hero wins money
+      const adjustedRake = profit > 0 ? rake : 0;
       
       // Update cumulative stats
       cumulativeStats.actual += profit;
+      cumulativeStats.withoutRake += profit + adjustedRake;
       cumulativeBigBlinds += hand.big_blind;
       
       if (isShowdownResult(hand.hero_hand_result)) {
@@ -465,6 +498,7 @@ export class ChartCalculator {
       
       // Accumulate for interval averaging
       intervalAccumulator.bb100Actual += currentBB100.actual;
+      intervalAccumulator.bb100WithoutRake += currentBB100.withoutRake;
       intervalAccumulator.bb100Showdown += currentBB100.showdown;
       intervalAccumulator.bb100NoShowdown += currentBB100.noShowdown;
       intervalAccumulator.count++;
@@ -472,14 +506,16 @@ export class ChartCalculator {
       // Check if we should create a data point
       if (this.shouldCreateDataPoint(handNumber, smoothInterval, index, hands.length)) {
         const avgBB100Actual = intervalAccumulator.bb100Actual / intervalAccumulator.count;
+        const avgBB100WithoutRake = intervalAccumulator.bb100WithoutRake / intervalAccumulator.count;
         const avgBB100Showdown = intervalAccumulator.bb100Showdown / intervalAccumulator.count;
         const avgBB100NoShowdown = intervalAccumulator.bb100NoShowdown / intervalAccumulator.count;
 
         result.actualBB100.push(this.createDataPoint(handNumber, avgBB100Actual, hand.hand_start_time));
+        result.profitWithoutRakeBB100.push(this.createDataPoint(handNumber, avgBB100WithoutRake, hand.hand_start_time));
         result.showdownBB100.push(this.createDataPoint(handNumber, avgBB100Showdown, hand.hand_start_time));
         result.noShowdownBB100.push(this.createDataPoint(handNumber, avgBB100NoShowdown, hand.hand_start_time));
         
-        intervalAccumulator = { bb100Actual: 0, bb100Showdown: 0, bb100NoShowdown: 0, count: 0 };
+        intervalAccumulator = { bb100Actual: 0, bb100WithoutRake: 0, bb100Showdown: 0, bb100NoShowdown: 0, count: 0 };
       }
     });
 
@@ -648,6 +684,7 @@ export class ChartCalculator {
     if (cumulativeBigBlinds <= 0) {
       return {
         actual: 0,
+        withoutRake: 0,
         showdown: 0,
         noShowdown: 0
       };
@@ -655,6 +692,7 @@ export class ChartCalculator {
 
     return {
       actual: (cumulativeStats.actual / cumulativeBigBlinds) * 100,
+      withoutRake: (cumulativeStats.withoutRake / cumulativeBigBlinds) * 100,
       showdown: (cumulativeStats.showdown / cumulativeBigBlinds) * 100,
       noShowdown: (cumulativeStats.noShowdown / cumulativeBigBlinds) * 100
     };

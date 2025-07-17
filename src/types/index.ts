@@ -160,6 +160,7 @@ export interface FinalStatistics {
 export interface PositionProfitChartData {
   position: string;
   actualProfit: ChartDataPoint[];
+  profitWithoutRake: ChartDataPoint[];
   showdownProfit: ChartDataPoint[];
   noShowdownProfit: ChartDataPoint[];
 }
@@ -178,6 +179,7 @@ export interface CompletePositionProfitChartData {
 export interface PositionBB100ChartData {
   position: string;
   actualBB100: ChartDataPoint[];
+  profitWithoutRakeBB100: ChartDataPoint[];
   showdownBB100: ChartDataPoint[];
   noShowdownBB100: ChartDataPoint[];
 }
@@ -190,6 +192,12 @@ export interface CompletePositionBB100ChartData {
   btn: PositionBB100ChartData;
   sb: PositionBB100ChartData;
   bb: PositionBB100ChartData;
+}
+
+// Combined position analysis chart data
+export interface CombinedPositionChartData {
+  profitData: CompletePositionProfitChartData;
+  bb100Data: CompletePositionBB100ChartData;
 }
 
 // Street-based profit statistics for position analysis

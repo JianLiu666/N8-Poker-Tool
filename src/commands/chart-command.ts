@@ -2,13 +2,13 @@ import path from 'path';
 import { SqliteManager } from '../database/sqlite-manager';
 import { ChartCalculator } from '../charts/chart-calculator';
 import { ChartGenerator } from '../charts/chart-generator';
-import { ChartCommandOptions, FinalStatistics } from '../types';
+import { ChartCommandOptions, FinalStatistics, ChartGenerationResult, PokerHand } from '../types';
 import { DATABASE, CHARTS, LOG_EMOJIS } from '../constants';
 import { createError } from '../utils';
 
 interface ChartResults {
-  streetAnalysisResult: any;
-  combinedPositionAnalysisResult: any;
+  streetAnalysisResult: ChartGenerationResult;
+  combinedPositionAnalysisResult: ChartGenerationResult;
 }
 
 export class ChartCommand {
@@ -19,7 +19,7 @@ export class ChartCommand {
 
   constructor(options: ChartCommandOptions) {
     this.options = options;
-    const dbPath = options.dbPath || path.join(process.cwd(), 'data', DATABASE.DEFAULT_PATH.split('/').pop()!);
+    const dbPath = options.dbPath || path.join(process.cwd(), DATABASE.DEFAULT_PATH);
     const outputDir = options.outputDir || path.join(process.cwd(), CHARTS.DEFAULT_OUTPUT_DIR.substring(2));
     
     this.sqliteManager = new SqliteManager({ dbPath });
@@ -76,7 +76,7 @@ export class ChartCommand {
   /**
    * Get hands data from database
    */
-  private async getHandsData() {
+  private async getHandsData(): Promise<PokerHand[]> {
     try {
       return await this.sqliteManager.getPokerHandsForChart(this.options?.dateRange);
     } catch (error) {
@@ -87,7 +87,7 @@ export class ChartCommand {
   /**
    * Get basic statistics for display
    */
-  private getBasicStatistics(hands: any[]): FinalStatistics {
+  private getBasicStatistics(hands: PokerHand[]): FinalStatistics {
     const totalHands = hands.length;
     
     if (totalHands === 0) {

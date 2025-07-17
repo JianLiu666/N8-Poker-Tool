@@ -12,19 +12,35 @@ import { createError, ensureDirectoryExists } from '../utils';
 
 export class SqliteManager {
   private db: sqlite3.Database | null = null;
-  private dbPath: string;
+  private readonly dbPath: string;
+
+  private static readonly SQL_QUERIES = {
+    TEST_CONNECTION: 'SELECT 1 as test',
+    SELECT_BY_ID: `SELECT * FROM ${DATABASE.TABLE_NAME} WHERE hand_id = ?`,
+    SELECT_BASIC: `SELECT * FROM ${DATABASE.TABLE_NAME}`,
+    SELECT_FOR_CHART: `SELECT 
+      hand_id, hand_start_time, big_blind, hero_position, hero_profit, hero_rake,
+      hero_hand_result, final_stage,
+      hero_preflop_actions, hero_flop_actions, hero_turn_actions, hero_river_actions
+    FROM ${DATABASE.TABLE_NAME}`,
+    ORDER_BY_TIME_DESC: ' ORDER BY hand_start_time DESC',
+    ORDER_BY_TIME_ASC: ' ORDER BY hand_start_time ASC',
+    LIMIT_CLAUSE: ' LIMIT ?',
+    OFFSET_CLAUSE: ' OFFSET ?',
+    DATE_RANGE_WHERE: ' WHERE hand_start_time >= ? AND hand_start_time <= ?'
+  } as const;
 
   constructor(config: DatabaseConfig) {
     this.dbPath = config.dbPath;
   }
 
   async connect(): Promise<void> {
-    return new Promise(async (resolve, reject) => {
-      try {
-        // Ensure database directory exists
-        const dbDir = path.dirname(this.dbPath);
-        await ensureDirectoryExists(dbDir);
+    try {
+      // Ensure database directory exists
+      const dbDir = path.dirname(this.dbPath);
+      await ensureDirectoryExists(dbDir);
 
+      return new Promise((resolve, reject) => {
         this.db = new sqlite3.Database(this.dbPath, (err) => {
           if (err) {
             reject(createError('Failed to connect to SQLite database', err));
@@ -33,34 +49,32 @@ export class SqliteManager {
             resolve();
           }
         });
-      } catch (error) {
-        reject(createError('Database connection setup failed', error as Error));
-      }
-    });
+      });
+    } catch (error) {
+      throw createError('Database connection setup failed', error as Error);
+    }
   }
 
   async disconnect(): Promise<void> {
+    if (!this.db) {
+      return;
+    }
+
     return new Promise((resolve, reject) => {
-      if (this.db) {
-        this.db.close((err) => {
-          if (err) {
-            reject(createError('Failed to close database', err));
-          } else {
-            console.log(`${LOG_EMOJIS.DATABASE} Database connection closed`);
-            this.db = null;
-            resolve();
-          }
-        });
-      } else {
-        resolve();
-      }
+      this.db!.close((err) => {
+        if (err) {
+          reject(createError('Failed to close database', err));
+        } else {
+          console.log(`${LOG_EMOJIS.DATABASE} Database connection closed`);
+          this.db = null;
+          resolve();
+        }
+      });
     });
   }
 
   async initializeTables(): Promise<void> {
-    if (!this.db) {
-      throw new Error('Database not connected');
-    }
+    this.ensureConnected();
 
     const createTablesSQL = this.getCreateTableSQL();
 
@@ -82,7 +96,7 @@ export class SqliteManager {
     }
 
     return new Promise((resolve) => {
-      this.db!.get('SELECT 1 as test', (err, row) => {
+      this.db!.get(SqliteManager.SQL_QUERIES.TEST_CONNECTION, (err, row) => {
         if (err) {
           console.error(`${LOG_EMOJIS.ERROR} Database connection test failed:`, err.message);
           resolve(false);
@@ -94,17 +108,19 @@ export class SqliteManager {
     });
   }
 
-  getDatabase(): sqlite3.Database {
+  private ensureConnected(): void {
     if (!this.db) {
       throw new Error('Database not connected');
     }
-    return this.db;
+  }
+
+  getDatabase(): sqlite3.Database {
+    this.ensureConnected();
+    return this.db!;
   }
 
   async insertPokerHand(hand: DatabaseInsertHand): Promise<number> {
-    if (!this.db) {
-      throw new Error('Database not connected');
-    }
+    this.ensureConnected();
 
     const sql = this.getInsertHandSQL();
     const params = this.buildInsertParams(hand);
@@ -121,9 +137,7 @@ export class SqliteManager {
   }
 
   async getPokerHands(limit?: number, offset?: number): Promise<PokerHand[]> {
-    if (!this.db) {
-      throw new Error('Database not connected');
-    }
+    this.ensureConnected();
 
     const { sql, params } = this.buildSelectQuery(limit, offset);
 
@@ -139,14 +153,10 @@ export class SqliteManager {
   }
 
   async getPokerHandById(handId: string): Promise<PokerHand | null> {
-    if (!this.db) {
-      throw new Error('Database not connected');
-    }
-
-    const sql = `SELECT * FROM ${DATABASE.TABLE_NAME} WHERE hand_id = ?`;
+    this.ensureConnected();
 
     return new Promise((resolve, reject) => {
-      this.db!.get(sql, [handId], (err, row) => {
+      this.db!.get(SqliteManager.SQL_QUERIES.SELECT_BY_ID, [handId], (err, row) => {
         if (err) {
           reject(createError('Failed to get poker hand', err));
         } else {
@@ -160,9 +170,7 @@ export class SqliteManager {
    * Gets poker hands ordered by time (oldest to newest) for chart generation
    */
   async getPokerHandsForChart(dateRange?: DateRange): Promise<PokerHand[]> {
-    if (!this.db) {
-      throw new Error('Database not connected');
-    }
+    this.ensureConnected();
 
     const { sql, params } = this.buildChartQuery(dateRange);
 
@@ -301,16 +309,16 @@ export class SqliteManager {
    * Builds SELECT query with optional pagination
    */
   private buildSelectQuery(limit?: number, offset?: number): { sql: string; params: any[] } {
-    let sql = `SELECT * FROM ${DATABASE.TABLE_NAME} ORDER BY hand_start_time DESC`;
+    let sql = SqliteManager.SQL_QUERIES.SELECT_BASIC + SqliteManager.SQL_QUERIES.ORDER_BY_TIME_DESC;
     const params: any[] = [];
 
     if (limit) {
-      sql += ' LIMIT ?';
+      sql += SqliteManager.SQL_QUERIES.LIMIT_CLAUSE;
       params.push(limit);
     }
 
     if (offset) {
-      sql += ' OFFSET ?';
+      sql += SqliteManager.SQL_QUERIES.OFFSET_CLAUSE;
       params.push(offset);
     }
 
@@ -321,20 +329,15 @@ export class SqliteManager {
    * Builds SELECT query for chart data with optional date filtering and optimized fields
    */
   private buildChartQuery(dateRange?: DateRange): { sql: string; params: any[] } {
-    // Select only necessary fields for chart generation to improve performance
-    let sql = `SELECT 
-      hand_id, hand_start_time, big_blind, hero_position, hero_profit, hero_rake,
-      hero_hand_result, final_stage,
-      hero_preflop_actions, hero_flop_actions, hero_turn_actions, hero_river_actions
-    FROM ${DATABASE.TABLE_NAME}`;
+    let sql = SqliteManager.SQL_QUERIES.SELECT_FOR_CHART;
     const params: any[] = [];
 
     if (dateRange) {
-      sql += ' WHERE hand_start_time >= ? AND hand_start_time <= ?';
+      sql += SqliteManager.SQL_QUERIES.DATE_RANGE_WHERE;
       params.push(dateRange.start, dateRange.end);
     }
 
-    sql += ' ORDER BY hand_start_time ASC'; // Oldest to newest for charts
+    sql += SqliteManager.SQL_QUERIES.ORDER_BY_TIME_ASC; // Oldest to newest for charts
 
     return { sql, params };
   }

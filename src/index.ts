@@ -7,6 +7,12 @@ import { ParseCommandOptions, ChartCommandOptions } from './types';
 import { ErrorHandler } from './utils';
 import { LOG_EMOJIS } from './constants';
 
+const CLI_CONFIG = {
+  NAME: 'n8-poker-tool',
+  DESCRIPTION: 'Natural8 PokerCraft log parser and analyzer',
+  VERSION: '1.0.0'
+} as const;
+
 /**
  * Create and configure the CLI program
  */
@@ -14,9 +20,9 @@ function createProgram(): Command {
   const program = new Command();
 
   program
-    .name('n8-poker-tool')
-    .description('Natural8 PokerCraft log parser and analyzer')
-    .version('1.0.0');
+    .name(CLI_CONFIG.NAME)
+    .description(CLI_CONFIG.DESCRIPTION)
+    .version(CLI_CONFIG.VERSION);
 
   return program;
 }
@@ -31,15 +37,7 @@ function addParseCommand(program: Command): void {
     .requiredOption('-i, --input <directory>', 'Input directory containing log files')
     .option('-d, --db <path>', 'SQLite database path (default: ./data/poker.db)')
     .action(async (options) => {
-      await executeCommand('parse', async () => {
-        const parseOptions: ParseCommandOptions = {
-          inputDir: options.input,
-          dbPath: options.db
-        };
-        
-        const parseCommand = new ParseCommand(parseOptions);
-        await parseCommand.execute();
-      });
+      await executeCommand('parse', () => handleParseCommand(options));
     });
 }
 
@@ -57,22 +55,39 @@ function addChartCommand(program: Command): void {
     .option('-i, --interval <number>', 'Chart sampling interval in hands (default: 1)', '1')
 
     .action(async (options) => {
-      await executeCommand('chart', async () => {
-        const chartOptions: ChartCommandOptions = {
-          dbPath: options.db,
-          outputDir: options.output,
-          dateRange: options.start && options.end ? {
-            start: options.start,
-            end: options.end
-          } : undefined,
-          interval: parseInt(options.interval, 10),
-
-        };
-        
-        const chartCommand = new ChartCommand(chartOptions);
-        await chartCommand.execute();
-      });
+      await executeCommand('chart', () => handleChartCommand(options));
     });
+}
+
+/**
+ * Handle parse command execution
+ */
+async function handleParseCommand(options: any): Promise<void> {
+  const parseOptions: ParseCommandOptions = {
+    inputDir: options.input,
+    dbPath: options.db
+  };
+  
+  const parseCommand = new ParseCommand(parseOptions);
+  await parseCommand.execute();
+}
+
+/**
+ * Handle chart command execution
+ */
+async function handleChartCommand(options: any): Promise<void> {
+  const chartOptions: ChartCommandOptions = {
+    dbPath: options.db,
+    outputDir: options.output,
+    dateRange: options.start && options.end ? {
+      start: options.start,
+      end: options.end
+    } : undefined,
+    interval: parseInt(options.interval, 10),
+  };
+  
+  const chartCommand = new ChartCommand(chartOptions);
+  await chartCommand.execute();
 }
 
 /**

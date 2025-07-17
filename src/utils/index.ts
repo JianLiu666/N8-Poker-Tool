@@ -2,6 +2,7 @@ import { POKER } from '../constants';
 
 /**
  * Utility functions for the N8 Poker Tool
+ * Provides common helper functions for parsing, formatting, and validation
  */
 
 /**
@@ -73,6 +74,20 @@ export const formatTimestamp = (): string => {
 };
 
 /**
+ * Formats a number as currency
+ */
+export const formatCurrency = (amount: number): string => {
+  return `$${amount.toFixed(2)}`;
+};
+
+/**
+ * Formats BB/100 value with proper decimal places
+ */
+export const formatBB100 = (value: number): string => {
+  return `${value.toFixed(2)} BB/100`;
+};
+
+/**
  * Ensures a directory path exists, creating it if necessary
  */
 export const ensureDirectoryExists = async (dirPath: string): Promise<void> => {
@@ -93,6 +108,19 @@ export const createError = (operation: string, originalError: Error | string): E
  */
 export const isValidHandId = (handId: string | undefined): boolean => {
   return Boolean(handId && handId.trim().length > 0);
+};
+
+/**
+ * Validates date string format (YYYY-MM-DD)
+ */
+export const isValidDateFormat = (dateString: string): boolean => {
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(dateString)) {
+    return false;
+  }
+  
+  const date = new Date(dateString);
+  return date.toISOString().split('T')[0] === dateString;
 };
 
 /**
